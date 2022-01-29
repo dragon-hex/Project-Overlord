@@ -358,12 +358,11 @@ class world:
 
     def initDisplayComponents(self):
         """initDisplayComponents: init all the display components."""
-        pass
+        self.coreDisplay = display(self.viewport)
 
     def init(self):
         """init: init the player and the world."""
         # init the display!
-        self.coreDisplay = display(self.viewport)
         self.initDisplayComponents()
 
         # player init!
@@ -446,6 +445,19 @@ class world:
                 if pygame.time.get_ticks() > element.textureTiming:
                     element.textureIndex = 0 if element.textureIndex + 1 >= len(element.texture) else element.textureIndex + 1
                     element.textureTiming = pygame.time.get_ticks() + (element.textureUpdateTime * 1000)
+    
+    def cursorWalkEvent(self):
+        """cursorWalkEvent: you can walk using the mouse clicks."""
+        # TODO: implement such feature.
+        pass
+
+    def resetHides(self):
+        """resetHides: reset everything."""
+        self.dmsg("reseting draw...")
+        self.skyBoxCleanup()
+        self.hideSkyBox = False
+        self.hidePlayer = False
+        self.hideWorld  = False
 
     def tick(self, events):
         """tick: process all the game events."""
@@ -453,6 +465,11 @@ class world:
             if event.type == pygame.QUIT:
                 self.core.running = False
                 return
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                # NOTE: if enabled, this functionality allows the player to walk
+                # using the mouse clicks (left button)
+                if event.button == pygame.BUTTON_LEFT:
+                    self.cursorWalkEvent()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F1:
                     self.dmsg("hiding player...")
@@ -464,12 +481,8 @@ class world:
                     self.dmsg("hiding skybox...")
                     self.hideSkyBox = not self.hideSkyBox
                 if event.key == pygame.K_F4:
-                    self.dmsg("reseting draw...")
-                    self.skyBoxCleanup()
-                    self.hideSkyBox = False
-                    self.hidePlayer = False
-                    self.hideWorld = False
-
+                    self.resetHides()
+                    
         # NOTE: the clouds are processed before everything 
         # since they only appear on the background.
         self.skyBoxTick()
