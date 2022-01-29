@@ -1,0 +1,6 @@
+{
+    "floor_var00":  {"size":[128, 128], "cutX": 0, "cutY": 0},
+    "floor_var01":  {"size":[128, 128], "cutX": 0, "cutY": 128},
+    "floor_var02":  {"size":[128, 128], "cutX": 128, "cutY": 0},
+    "floor_var03":  {"size":[128, 128], "cutX": 128, "cutY": 128}
+}
