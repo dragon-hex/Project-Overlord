@@ -2,6 +2,8 @@ import pygame
 import os, sys
 import math
 
+from ord.utils import *
+
 #
 # utils functions
 #
@@ -27,299 +29,130 @@ def getPosition(baseSurface, targetSurface, position):
     return [math.floor(xPos), math.floor(yPos)]
 
 #
-# display holder
+# __basicContainer()
 #
 
-class display:
-    def __init__(self, atDisplay: pygame.Surface):
-        """display: store the display elements."""
-        self.atDisplay = atDisplay
+class __basicContainer:
+    def __init__(self):
         self.elements = []
+        # !! controllers !!
+        self.doTickElements = True
+        self.doDrawElements = True
+        # !! error handlers !!
+        self.onTickError = None
+        self.onDrawError = None
     
     def addElement(self, element):
-        """addElement: insert a element."""
+        """addElement: insert a element on the frame/display."""
         self.elements.append(element)
     
-    def tick(self, events):
-        """tick: tick all the events here."""
-        for element in self.elements:
-            try:
-                element.tick(events)
-            except Exception as E:
-                # TODO: implement a error handler.
-                pass
-    
-    def draw(self):
-        """draw: draw all the events here."""
-        for element in self.elements:
-            try:
-                element.draw()
-            except Exception as E:
-                # TODO: implement a error handler.
-                pass
+    #
+    # tick function
+    #
+    def __handleExceptionAtTick(self, exception):
+        """__handleExceptionAtTick: when a tick error happens."""
+        if self.onTickError:
+            if callable(self.onTickError):
+                invokeSafe(self.onTickError, exception)
 
-#
-# frame element
-#
-
-class frame:
-    def __init__(self, atDisplay: display, backgroundSize):
-        """frame: the frame contains a special drawing surface into it."""
-        self.display = atDisplay
-        
-        # NOTE: init the main display.
-        self.atDisplay = pygame.Surface(backgroundSize)
-        self.background = pygame.Surface(backgroundSize)
-        self.background.fill((255, 255, 255))
-
-
-        # position and etc.
-        self.visible = True
-        self.position = [0, 0]
-        self.useFixedPosition = True
-        self.elements = []
-    
-    # set/add(s).
-    def setFrameSize(self, width, height):
-        self.atDisplay = pygame.Surface((width, height))
-        self.atDisplay.fill((0, 0, 0))
-    
-    def setBackgroundColor(self, color):
-        self.background.fill(color)
-
-    def addElement(self, element):
-        self.elements.append(element)
-    
-    # tick function(s)
-    def tick(self, events):
-        if self.visible:
+    def tickElements(self, events):
+        """tick function!"""
+        if self.doTickElements:
             for element in self.elements:
                 try:
+                    # try to invoke the .tick() function
                     element.tick(events)
                 except Exception as E:
-                    continue
+                    self.__handleExceptionAtTick(E)
     
-    # draw function(s)
-    def __drawDisplay(self):
-        """__drawDisplay: draw the display."""
-        self.display.atDisplay.blit(
-            self.atDisplay,
-            self.position if not self.useFixedPosition else getPosition(self.display.atDisplay, self.atDisplay, self.position)
-        )
+    #
+    # draw function
+    #
+    def __handleExceptionAtDraw(self, exception):
+        """__handleExceptionAtDraw: when a draw error happens."""
+        if self.onDrawError:
+            if callable(self.onDrawError):
+                invokeSafe(self.onDrawError, exception)
 
-    def __cleanDisplay(self):
-        """__cleanDisplay: empty the display."""
-        self.atDisplay.fill((0, 0, 0))
-    
-    def __drawBackground(self):
-        """__drawBackground: draw the background display."""
-        self.atDisplay.blit(self.background, (0, 0))
-
-    def draw(self):
-        """draw: draw the frame."""
-        if self.visible:
-            self.__cleanDisplay()
-            self.__drawBackground()
+    def drawElements(self):
+        """draw function!"""
+        if self.doDrawElements:
             for element in self.elements:
                 try:
+                    # again, try to invoke .draw() function
                     element.draw()
                 except Exception as E:
-                    continue
-            self.__drawDisplay()
+                    self.__handleExceptionAtDraw(E)
 
 #
-# label element
+# cursor class
 #
 
-class label:
-    def __init__(self, atDisplay: display | frame, text: str, font: any):
-        """label: this element stores text!"""
-        self.atDisplay = atDisplay
-        self.text = text
-        self.font = font
-        
-        # theme configuration
-        self.foregroundColor = [255, 255, 255]
-        self.useAntialising = True
+CURSOR_DEFAULT = 0
+CURSOR_WAITING = 1
 
-        # position & geometry
-        self.position = [0, 0]
-        self.useFixedPosition = True
-
-        # label stuff.
-        self.__needRedraw = True
-        self.__surface = None
-        self.render()
+class cursor:
+    def __init__(self):
+        # !! sizes & positions !! ##
+        self.size = [12, 12]
+        self.rect = pygame.Rect((0, 0), self.size)
+        self.textures = []
+        self.cursorState = CURSOR_DEFAULT
+        self.cursorTextureIndex = 0
+        self.cursorTiming = 0
+        self.__initTemporaryTexture()
     
-    def render(self):
-        """render: render the label."""
-        self.__surface = self.font.render(self.text, self.useAntialising, self.foregroundColor)
+    def __initTemporaryTexture(self):
+        """__initTemporaryTexture: init a simple texture."""
+        pixelBlock = pygame.Surface(self.size)
+        pixelBlock.fill(randomRGBColor())
+        self.textures = [
+            [pixelBlock.copy(), pixelBlock.copy()], # -> DEFAULT MODE...
+            [pixelBlock.copy(), pixelBlock.copy()]  # -> WAITING MODE...
+        ]
+    
+    def tick(self):
+        """tick: the mouse position."""
+        (self.rect.x, self.rect.y) = pygame.mouse.get_pos()
+        self.rect.x -= (self.rect.width // 2)
+        self.rect.y -= (self.rect.height // 2)
 
-    def setText(self, text: str):
-        """setText: this will also, set the redraw!"""
-        self.text = text
-        self.__needRedraw = True
+#
+# display class
+#
+
+class display(__basicContainer):
+    def __init__(self, atSurface: pygame.Surface):
+        # init the top class.
+        super().__init__()
+        # !! names & types !! ##
+        self.name = 'display'
+        self.type = 'display'
+        # !! destination !! ##
+        self.atSurface = atSurface
+        self.cursor = cursor()
     
     def tick(self, events):
-        """tick: basically update the label."""
-        if self.__needRedraw:
-            # NOTE: this prevent the label of taking the time
-            # from other places.
-            self.render()
-            self.__needRedraw = False
-        
-    def draw(self):
-        """draw: draw the label."""
-        # TODO: fix this redundancy.
-        if self.__surface:
-            self.atDisplay.atDisplay.blit(
-                self.__surface,
-                self.position if not self.useFixedPosition else getPosition(self.atDisplay.atDisplay, self.__surface, self.position)
+        """tick: tick the main display."""
+        self.cursor.tick()
+        self.tickElements(events)
+    
+    def __drawCursor(self):
+        """__drawCursor: draw the cursor."""
+        ## process the textures index ##
+        if pygame.time.get_ticks() > self.cursor.cursorTiming:
+            self.cursor.cursorTextureIndex = (
+                0 if self.cursor.cursorTextureIndex + 1 >= len(self.cursor.textures[self.cursor.cursorState]) 
+                else self.cursor.cursorTextureIndex + 1
             )
+            self.cursor.cursorTiming = pygame.time.get_ticks() + (0.2 * 1000)
+        ## display the cursor ##
+        self.atSurface.blit(
+            self.cursor.textures[self.cursor.cursorState][self.cursor.cursorTextureIndex], 
+            self.cursor.rect
+        )
 
-#
-# button element
-# 
-
-class button:
-    def __init__(self, atDisplay: display | frame, font: any, text: str):
-        """button: this is a simple button implementation!"""
-        self.atDisplay = atDisplay
-        self.text = text
-        self.font = font
-
-        # geometry & sizes.
-        self.size = [0, 0]
-        self.position = [0, 0]
-        self.useFixedPosition = False
-        
-        # theme
-        self.backgroundColor = [255, 255, 255]
-        self.foregroundColor = [0, 0, 0]
-        
-        # events!
-        self.onRightClick = None
-        self.onRightClickArgs = None
-        self.onLeftClick = None
-        self.onLeftClickArgs = None
-        
-        # internal workings
-        self.__needRedraw = True
-        self.__surface = None
-    
-    def render(self):
-        """render: render the element!""" 
-        if self.size[0] <= 0 or self.size[1] <= 0:
-            # NOTE: if there is no size, then ignore.
-            return
-        else:
-            # NOTE: this keep the surface.
-            self.__surface = pygame.Surface(self.size)
-            self.__surface.fill(self.backgroundColor)
-            renderedText = self.font.render(self.text, True, self.foregroundColor)
-            self.__surface.blit(
-                renderedText,
-                (
-                    self.__surface.get_width() // 2 -  renderedText.get_width() // 2,
-                    self.__surface.get_height() // 2 - renderedText.get_height() // 2
-                )
-            )
-
-    def setPosition(self, xPos: int, yPos: int):
-        """setPosition: set the position.""" 
-        self.position = [xPos, yPos]
-        self.__needRedraw = True
-    
-    def setText(self, text: str):
-        self.text = text
-        self.__needRedraw = True
-    
-    def tick(self, events):
-        if self.__needRedraw:
-            self.render()
-        # NOTE: check for the cursor position.
-        mouseRect = pygame.Rect()
-        for event in events:
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == pygame.BUTTON_RIGHT:
-                    self.onRightClick(self.onRightClickArgs)
-    
     def draw(self):
-        # NOTE: sometimes, the surface can be none.
-        if self.__surface:
-            self.atDisplay.atDisplay.blit(
-                self.__surface,
-                self.position if self.useFixedPosition else getPosition(self.atDisplay.atDisplay, self.__surface, self.position)
-            )
-
-#
-# name collect package.
-#
-
-class nameCollect:
-    def __init__(self, atDisplay: display, font):
-        self.atDisplay = atDisplay
-        self.buttons = []
-        self.background = None
-        self.textInputed = str()
-        self.font = font
-        self.build()
-    
-    def __handle(self, button):
-        print(button)
-    
-    def build(self):
-        """build: set all the buttons here."""
-        # !! LOAD THE BACKGROUND !! ##
-        self.background = pygame.Surface(self.atDisplay.atDisplay.get_size())
-        self.background.fill((0, 0, 0))
-
-        # !! BUILD THE a-z buttons !! ##
-        chars = [ chr(char) for char in range(ord('a'), ord('z')+1) ]
-        chars +=[ '_', '!', '@', '#' ]
-
-        positionX = 150
-        positionY = 200
-
-        __buttonWidth   = 50
-        __buttonHeight  = 50
-        __buttonPerLine = 6
-
-        xOffset= 10
-        yOffset= 5
-        xIndex = 0
-        yIndex = 0
-
-        for char in chars:
-            # load the Y lines.
-            if (xIndex / __buttonWidth) >= __buttonPerLine:
-                yIndex += __buttonHeight
-                yOffset+= 10
-                xIndex = 0
-                xOffset = 10
-
-            # build the button.
-            buttonPrototype = button(self.atDisplay, self.font, char)
-            buttonPrototype.onRightClick = self.__handle
-            buttonPrototype.onRightClickArgs = char
-            buttonPrototype.useFixedPosition = True
-            buttonPrototype.size = [__buttonWidth, __buttonHeight]
-            buttonPrototype.position = [
-                positionX + (xIndex + xOffset),
-                positionY + (yIndex + yOffset)
-            ]
-            # append the buttons and prepare for the next.
-            self.buttons.append(buttonPrototype)
-            xIndex += __buttonWidth
-            xOffset += __buttonWidth
-    
-    def tick(self, events):
-        """tick: process all the button matrix."""
-        for button in self.buttons:
-            button.tick(events)
-    
-    def draw(self):
-        """draw: show all the button matrix."""
-        self.atDisplay.atDisplay.blit(self.background, (0, 0))
-        for button in self.buttons:
-            button.draw()
+        """draw: draw the display.""" 
+        self.__drawCursor()
+        self.drawElements()
