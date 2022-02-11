@@ -1,0 +1,8 @@
+{
+    "default00": { "size": [128, 128], "cutX": 0,   "cutY": 0   },
+    // carpet //
+    "carpet00" : { "size": [128, 128], "cutX": 128, "cutY": 0   },
+    "carpet01" : { "size": [128, 128], "cutX": 0,   "cutY": 128 },
+    "carpet02" : { "size": [128, 128], "cutX": 128, "cutY": 128 },
+    "carpet03" : { "size": [128, 128], "cutX": 0,   "cutY": 256 }
+}

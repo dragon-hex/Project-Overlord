@@ -1,0 +1,45 @@
+{
+    "player": {
+        "spawn"     : [0, 0]
+    },
+    "background": {
+        "texture"   : {"name":"d_floor","type":"sprite"},
+        "tileSize"  : [128, 128],
+        "size"      : [6, 5],
+        "generate"  : {
+            "method": "mapped",
+            "blocks": {
+                "0":    {"type":"sprite", "name":"r_floor", "only":["default00"] },
+                "1":    {"type":"sprite", "name":"r_floor", "only":["carpet00"]},
+                "2":    {"type":"sprite", "name":"r_floor", "only":["carpet02"]},
+                "3":    {"type":"sprite", "name":"r_floor", "only":["carpet01"]},
+                "4":    {"type":"sprite", "name":"r_floor", "only":["carpet03"]}
+            },
+            "matrix": [
+                ["0", "0", "0", "0", "0", "0"],
+                ["0", "0", "0", "0", "0", "0"],
+                ["0", "0", "1", "2", "0", "0"],
+                ["0", "0", "3", "4", "0", "0"],
+                ["0", "0", "0", "0", "0", "0"]
+            ]
+        }
+    },
+    "elements": [
+        {
+            "name":                 "table_left",
+            "generic":              "table00left00",
+            "position":             [2, 0],
+            "size":                 [128, 128],
+            "textureUpdateTime":    0.3,
+            "texture":              {"type":"sprite","name":"r_table","only":["table00"]}
+        },
+        {
+            "name":                 "table_right",
+            "generic":              "table00right00",
+            "position":             [3, 0],
+            "size":                 [128, 128],
+            "textureUpdateTime":    0.3,
+            "texture":              {"type":"sprite","name":"r_table","only":["table01"]}
+        }
+    ]
+}

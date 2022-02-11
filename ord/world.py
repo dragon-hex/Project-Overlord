@@ -9,6 +9,7 @@ import random
 from .core import core
 from .utils import *
 from .gui import *
+from .game import *
 
 #
 # constants.
@@ -158,104 +159,25 @@ class world:
         self.world = None
 
         # NOTE: the skybox properties.
-        self.skyBoxBackground   = [115, 179, 191]
-        self.skyBoxCloudColor   = [255, 255, 255]
-        self.skyBoxEnabled      = True
-        self.skyBoxClouds       = []
-        self.skyBoxCloudMax     = 25
-        self.skyBoxCloudTickTime= 0.2
-        self.skyBoxTickTiming   = 0
+        self.skyBox = skyBox(self.viewport)        
 
         # Some debug functions!
         self.hideWorld = False
-        self.hideSkyBox = False
         self.hidePlayer = False
 
     def dmsg(self, string: str):
         self.debug.write(string, location=__name__)
     
     #
-    # Sky Box Functions
-    #
-    class skyBoxCloud:
-        def __init__(self):
-            # NOTE: left = 0 | right = 1
-            self.surface = None
-            self.position = [0, 0]
-            self.speed = 0
-            self.direction = 0
-
-    def skyBoxNewCloud(self):
-        """skyBoxNewCloud: spawn some clouds!"""
-        _CW     = 256 * 2
-        _CH     = 64 * 2
-        _NPX    = 200
-
-        # NOTE: cloud is a class!
-        protoCloud = self.skyBoxCloud()
-        protoCloud.surface = pygame.Surface((_CW, _CH), pygame.SRCALPHA)
-        protoCloud.surface.fill((0, 0, 0, 0))
-
-        # Load the position & direction.
-        protoCloud.position = [
-            random.randint(0, self.viewport.get_width()  - _CW),
-            random.randint(0, self.viewport.get_height() - _CH)
-        ]
-        protoCloud.direction = random.randint(1, 2) - 1
-        
-        # NOTE: use a simple algorithm to generate the cloud pattern!
-        _R = self.skyBoxCloudColor[0]
-        _G = self.skyBoxCloudColor[1]
-        _B = self.skyBoxCloudColor[2]
-        _A = 255
-        for pixelCounter in range(0, _NPX):
-            radiusSize = random.randint(10, 30)
-            centerSurX = protoCloud.surface.get_width()    // 2 - radiusSize
-            centerSurY = protoCloud.surface.get_height()   // 2 - radiusSize
-            randomXPos = random.randint(centerSurX, centerSurX + 220)
-            randomXPos = -(randomXPos) if random.randint(1, 8) in (2, 4) else randomXPos
-            randomYPos = random.randint(centerSurY, centerSurY + 50)
-            randomYPos = -(randomYPos) if random.randint(1, 8) in (2, 4) else randomYPos
-            pygame.draw.circle(protoCloud.surface,(_R, _G, _B, _A),(randomXPos, randomYPos),radiusSize)
-            _A = _A - 1 if _A > 0 else _A
-        
-        # insert the cloud!
-        self.skyBoxClouds.append(protoCloud)
-    
-    def skyBoxTick(self):
-        """skyBoxTick: process the cloud moviments."""
-        if pygame.time.get_ticks() > self.skyBoxTickTiming:
-            if len(self.skyBoxClouds) <= self.skyBoxCloudMax:
-                self.dmsg("spawning clouds in background: [%d/ %d]" % (len(self.skyBoxClouds), self.skyBoxCloudMax))
-                self.skyBoxNewCloud()
-            for cloud in self.skyBoxClouds:
-                if (cloud.position[0] + cloud.surface.get_width() < 0 or 
-                    cloud.position[0] - cloud.surface.get_width() > self.viewport.get_width()):
-                    self.skyBoxClouds.remove(cloud)
-                else:
-                    cloud.position[0] += -1 if cloud.direction == 0 else 1
-            self.skyBoxTickTiming = pygame.time.get_ticks() + (0.1 * 1000)
-
-    def skyBoxDraw(self):
-        """skyBoxDraw: draw the skybox."""
-        self.viewport.fill(self.skyBoxBackground)
-        for cloud in self.skyBoxClouds:
-            self.viewport.blit(
-                cloud.surface,
-                cloud.position
-            )
-        
-    def skyBoxCleanup(self):
-        self.skyBoxClouds = []
-
-    #
     # init functions
     #
 
     def loadWorldByName(self, name, format=".json"):
         """loadWorldByName: load the world by it's name."""
+
         extractTarget = self.core.baseDir + "map" + os.sep + name + format
         self.dmsg("loading map file: %s" % extractTarget)
+
         extractedInfo = jsonLoad(extractTarget)
         self.loadWorldByData(extractedInfo)
     
@@ -284,8 +206,10 @@ class world:
         # generateBackground() -> spawnElements() -> finalize()
         self.generateBackground(protoWorld)
         self.dmsg("loaded background!")
+
         self.spawnElements(protoWorld)
         self.dmsg("loaded elements!")
+        
         self.finalize(protoWorld)
         self.dmsg("finalized loading.")
 
@@ -306,6 +230,7 @@ class world:
         # !! INIT RANDOM & SIZES !!
         __randomGenerator = random.Random()
         __randomGenerator.seed(generationInstruction.get("seed"))
+
         _W  = world.backgroundData.get("size")[0]       ; _H = world.backgroundData.get("size")[1]
         _TW = world.backgroundData.get("tileSize")[0]   ; _TH = world.backgroundData.get("tileSize")[1]
 
@@ -315,7 +240,9 @@ class world:
             # in games that have a large map, so on the next versions
             # implement the chunk rendering system!
             self.dmsg("background is using the random generation.")
+        
             world.background = pygame.Surface(((_W + 1) * _TW, (_H + 1) * _TH))
+        
             for yIndex in range(0, _H+1):
                 for xIndex in range(0, _W+1):
                     textureChoice = __randomGenerator.choice(texturesLoad)
@@ -326,35 +253,48 @@ class world:
                             _TH * yIndex
                         )
                     )
+
         elif generationInstruction.get("method") == "mapped":
             # NOTE: load the blocks texture.
             self.dmsg("background is using the mapped generation.")
+
             blockDict = {}
             blocks = generationInstruction.get("blocks")
+            
             for blockKey in blocks.keys():
                 blockDict[blockKey] = self.core.storage.getContentByRequest(blocks[blockKey])
+            
             # !! BEGIN BUILDING THE BACKGROUND !!
             matrix = generationInstruction.get("matrix")
             world.background = pygame.Surface(((_W) * _TW, (_H) * _TH))
+            
             for yIndex in range(0, _H + 1):
                 # NOTE: prevent from errors.
                 # BUG: this is a bug, the generation should index from 0 -> x.
+            
                 if yIndex >= len(matrix):
                     self.dmsg("yLine has finished before expected: %d -> %d" % (yIndex, len(matrix)))
                     break
+            
                 for xIndex in range(0, _W + 1):
                     # NOTE: prevent from errors.
                     if xIndex >= len(matrix[yIndex]):
                         self.dmsg("xLine has finished before expected: %d -> %d" % (xIndex, len(matrix[yIndex])))
                         break
+
                     blockRequest = matrix[yIndex][xIndex]
                     textureAdquired = blockDict[blockRequest]
+                    
                     if isinstance(textureAdquired, list):
-                        texture = __randomGenerator.choice(textureAdquired)
-                        world.background.blit(
-                            texture,
-                            (xIndex * _TW, yIndex * _TH)
-                        )
+                        if len(textureAdquired) <= 1:
+                            texture = textureAdquired[0]
+                        else:
+                            texture = __randomGenerator.choice(textureAdquired)
+                    
+                    world.background.blit(
+                        texture,
+                        (xIndex * _TW, yIndex * _TH)
+                    )
 
     def initDisplayComponents(self):
         """initDisplayComponents: init all the display components."""
@@ -370,7 +310,7 @@ class world:
         self.player.centerPlayer(self.viewport.get_width(), self.viewport.get_height())
 
         self.dmsg("loading temporary map...")
-        self.loadWorldByName("01-world")
+        self.loadWorldByName("initial-room")
 
     #
     # tick functions
@@ -387,13 +327,13 @@ class world:
 
         ## !! BEGIN TO BUILD THE ELEMENT !! ##
         protoElement = wElement()
-        protoElement.textureType = ELEMENT_TEX_IMAGE if textureInfo.get("type")=='image' else ELEMENT_TEX_SPRITE
-        protoElement.textureUpdateTime = element.get("textureUpdateTime")
-        protoElement.texture = self.core.storage.getContentByRequest(textureInfo)
+        protoElement.textureType        = ELEMENT_TEX_IMAGE if textureInfo.get("type")=='image' else ELEMENT_TEX_SPRITE
+        protoElement.textureUpdateTime  = element.get("textureUpdateTime") or 0.5
+        protoElement.texture            = self.core.storage.getContentByRequest(textureInfo)
 
-        protoElement.position = elementPos
-        protoElement.size = elementSize
-        protoElement.collide = element.get("collide")
+        protoElement.position           = elementPos
+        protoElement.size               = elementSize
+        protoElement.collide            = element.get("collide")
 
         protoElement.rect = pygame.Rect(
             (
@@ -454,8 +394,9 @@ class world:
     def resetHides(self):
         """resetHides: reset everything."""
         self.dmsg("reseting draw...")
-        self.skyBoxCleanup()
-        self.hideSkyBox = False
+        
+        self.skyBox.deleteClouds()
+
         self.hidePlayer = False
         self.hideWorld  = False
 
@@ -465,11 +406,13 @@ class world:
             if event.type == pygame.QUIT:
                 self.core.running = False
                 return
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 # NOTE: if enabled, this functionality allows the player to walk
                 # using the mouse clicks (left button)
                 if event.button == pygame.BUTTON_LEFT:
                     self.cursorWalkEvent()
+
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F1:
                     self.dmsg("hiding player...")
@@ -479,13 +422,13 @@ class world:
                     self.hideWorld = not self.hideWorld
                 if event.key == pygame.K_F3:
                     self.dmsg("hiding skybox...")
-                    self.hideSkyBox = not self.hideSkyBox
+                    self.skyBox.enabled = not self.skyBox.enabled
                 if event.key == pygame.K_F4:
                     self.resetHides()
                     
         # NOTE: the clouds are processed before everything 
         # since they only appear on the background.
-        self.skyBoxTick()
+        self.skyBox.tick()
 
         # load the continuous keypresses!
         # TODO: implement key maps!
@@ -567,8 +510,8 @@ class world:
             self.cleanScreen()
             self.cleanViewport()
             # NOTE: draw the skybox.
-            if not self.hideSkyBox:
-                self.skyBoxDraw()
+            self.skyBox.draw()
+
             # drawWorld (case loaded.) -> drawPlayer
             if self.world:
                 self.drawWorld(self.world)

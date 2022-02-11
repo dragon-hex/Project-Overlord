@@ -156,7 +156,18 @@ class contentProvider:
         eName = data.get("name")
         eType = data.get("type")
         if eType == CPR_TYPE_SPRITE:
-            return self.getSprites(eName)
+            only = data.get("only")
+            if not only:
+                return self.getSprites(eName)
+            else:
+                orderedDict = self.getSprites(eName, ordered=True)
+                toReturn = []
+                for key in orderedDict.keys():
+                    if key in only:
+                        print(key)
+                        toReturn.append(orderedDict.get(key))
+                print(toReturn)
+                return toReturn
         elif eType == CPR_TYPE_IMAGE:
             return self.getImage(eName)
         else:
