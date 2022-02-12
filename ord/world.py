@@ -154,8 +154,11 @@ class world:
         # load all the generic stuff.
         self.core = core
         self.player = player()
+
+        # => init the debug <=
         self.debug = debugReporter(debug)
-        self.debug.write("Hello! You enabled debug!",location=__name__)
+        self.debug.location = "world"
+        self.debug.write("Hello! You enabled debug!")
         
         # viewport and drawing stuff.
         self.viewport = pygame.Surface(self.core.window.surface.get_size(), pygame.SRCALPHA)
@@ -171,9 +174,6 @@ class world:
         self.hideWorld = False
         self.hidePlayer = False
         self.debugHitboxes = True
-
-    def dmsg(self, string: str):
-        self.debug.write(string, location=__name__)
     
     def crash(self, reason: str):
         """
@@ -221,7 +221,7 @@ class world:
         extractTarget = self.core.baseDir + "map" + os.sep + name + format
         self.makeSure(os.path.isfile(extractTarget), "File not found: %s" % extractTarget)
 
-        self.dmsg("loading map file: %s" % extractTarget)
+        self.debug.write("loading map file: %s" % extractTarget)
         extractedInfo = jsonLoad(extractTarget)
 
         self.loadWorldByData(extractedInfo)
@@ -232,7 +232,7 @@ class world:
 
     def spawnElements(self, world: wStore):
         """spawnElements: load all the world elements."""
-        self.dmsg("there are %d elements to load." % len(world.elementData))
+        self.debug.write("there are %d elements to load." % len(world.elementData))
         for element in world.elementData:
             self.newElement(world, element)
         
@@ -267,18 +267,18 @@ class world:
         # -- init the world loading process! --
         # generateBackground() -> spawnElements() -> finalize()
         self.generateBackground(protoWorld)
-        self.dmsg("loaded background!")
+        self.debug.write("loaded background!")
 
         self.spawnElements(protoWorld)
-        self.dmsg("loaded elements!")
+        self.debug.write("loaded elements!")
         
         self.finalize(protoWorld)
-        self.dmsg("finalized loading.")
+        self.debug.write("finalized loading.")
 
         # -- init the player! --
         # loadPlayerSprites() -> loadPlayerSpawn()
         self.loadPlayerSpawn(protoWorld)
-        self.dmsg("loading player spawn...")
+        self.debug.write("loading player spawn...")
 
         # set the current world as the proto one.
         self.world = protoWorld
@@ -309,7 +309,7 @@ class world:
             # TODO: this way of rendering the tiles are not very good
             # in games that have a large map, so on the next versions
             # implement the chunk rendering system!
-            self.dmsg("background is using the random generation.")
+            self.debug.write("background is using the random generation.")
         
             world.background = pygame.Surface(((_W + 1) * _TW, (_H + 1) * _TH))
         
@@ -326,7 +326,7 @@ class world:
 
         elif generationInstruction.get("method") == "mapped":
             # NOTE: load the blocks texture.
-            self.dmsg("background is using the mapped generation.")
+            self.debug.write("background is using the mapped generation.")
 
             blockDict = {}
             blocks = generationInstruction.get("blocks")
@@ -343,13 +343,13 @@ class world:
                 # BUG: this is a bug, the generation should index from 0 -> x.
             
                 if yIndex >= len(matrix):
-                    self.dmsg("yLine has finished before expected: %d -> %d" % (yIndex, len(matrix)))
+                    self.debug.write("yLine has finished before expected: %d -> %d" % (yIndex, len(matrix)))
                     break
             
                 for xIndex in range(0, _W + 1):
                     # NOTE: prevent from errors.
                     if xIndex >= len(matrix[yIndex]):
-                        self.dmsg("xLine has finished before expected: %d -> %d" % (xIndex, len(matrix[yIndex])))
+                        self.debug.write("xLine has finished before expected: %d -> %d" % (xIndex, len(matrix[yIndex])))
                         break
 
                     blockRequest = matrix[yIndex][xIndex]
@@ -398,7 +398,9 @@ class world:
             "Strange project.",
             "Project Overlord? more like overload my memory!"
         ]
-        return random.choice(__messages)
+        phrase = random.choice(__messages)
+        self.debug.write("game phrase selected: '%s'" % phrase)
+        return phrase
 
     def __initPanicDisplay(self):
         # => build the panic frame <=
@@ -457,7 +459,7 @@ class world:
         self.player.playerTextureGenerate()
         self.player.centerPlayer(self.viewport.get_width(), self.viewport.get_height())
 
-        self.dmsg("loading temporary map...")
+        self.debug.write("loading temporary map...")
         self.loadWorldByName("initial-room")
 
     #
@@ -471,13 +473,17 @@ class world:
         elementPos  = element.get("position")
         tileSize    = world.backgroundData.get("tileSize")
 
-        self.dmsg("new element spawned: " + element.get("name"))
+        self.debug.write("new element spawned: " + str(element.get("name")))
 
         ## !! BEGIN TO BUILD THE ELEMENT !! ##
         protoElement = wElement()
+        protoElement.name               = element.get("name")
+        self.makeSure(protoElement.name != None, "no name provided for element in level '%s'" % world.name)
+        protoElement.genericName        = element.get("generic") or protoElement.name
         protoElement.textureType        = ELEMENT_TEX_IMAGE if textureInfo.get("type")=='image' else ELEMENT_TEX_SPRITE
         protoElement.textureUpdateTime  = element.get("textureUpdateTime") or 0.5
         protoElement.texture            = self.core.storage.getContentByRequest(textureInfo)
+        self.makeSure(protoElement.texture != False, "unable to load texture: %s" % textureInfo)
 
         protoElement.position           = elementPos
         protoElement.size               = elementSize
@@ -510,7 +516,7 @@ class world:
                 yPosition = yDrawPosition + yPos
             else:
                 # TODO: crash here.
-                return
+                self.crash("Invalid collision method in element: %s" % element.get("name"))
 
             # build the rect here.
             protoElement.collisionRect = pygame.Rect((xPosition, yPosition), (xSize, ySize))
@@ -541,8 +547,6 @@ class world:
 
     def walk(self, world: wStore, xDir: int, yDir: int):
         """walk: this function will check for collisions."""
-        # !! INIT THE WALK PRINCIPLE !! ##
-
         # check if the new position will collide in something.
         playerCollisionTest = self.player.rect.copy()
         playerCollisionTest.x -= xDir
@@ -583,7 +587,7 @@ class world:
     def resetHides(self):
         """resetHides: reset everything."""
         # reset the clouds
-        self.dmsg("reseting draw...")
+        self.debug.write("reseting draw...")
         self.skyBox.deleteClouds()
 
         # hide the player.
@@ -678,6 +682,11 @@ class world:
             if element.textureType == ELEMENT_TEX_SPRITE:
                 self.viewport.blit(
                     element.texture[element.textureIndex],
+                    element.drawRect
+                )
+            else:
+                self.viewport.blit(
+                    element.texture,
                     element.drawRect
                 )
 
