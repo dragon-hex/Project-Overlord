@@ -19,6 +19,7 @@ class skyBox:
         self.background   = [115, 179, 191]
         self.cloudColor   = [255, 255, 255]
         self.enabled      = True
+        self.enabledClouds= True
         self.clouds       = []
         self.cloudMax     = 25
         self.cloudTickTime= 0.2
@@ -64,26 +65,28 @@ class skyBox:
     def tick(self):
         """skyBoxTick: process the cloud moviments."""
         if self.enabled:
-            if pygame.time.get_ticks() > self.tickTiming:
-                if len(self.clouds) <= self.cloudMax:
-                    self.newCloud()
-                for cloud in self.clouds:
-                    if (cloud.position[0] + cloud.surface.get_width() < 0 or 
-                        cloud.position[0] - cloud.surface.get_width() > self.viewport.get_width()):
-                        self.clouds.remove(cloud)
-                    else:
-                        cloud.position[0] += -1 if cloud.direction == 0 else 1
-                self.tickTiming = pygame.time.get_ticks() + (0.1 * 1000)
+            if self.enabledClouds:
+                if pygame.time.get_ticks() > self.tickTiming:
+                    if len(self.clouds) <= self.cloudMax:
+                        self.newCloud()
+                    for cloud in self.clouds:
+                        if (cloud.position[0] + cloud.surface.get_width() < 0 or 
+                            cloud.position[0] - cloud.surface.get_width() > self.viewport.get_width()):
+                            self.clouds.remove(cloud)
+                        else:
+                            cloud.position[0] += -1 if cloud.direction == 0 else 1
+                    self.tickTiming = pygame.time.get_ticks() + (0.1 * 1000)
 
     def draw(self):
         """skyBoxDraw: draw the skybox."""
         if self.enabled:
             self.viewport.fill(self.background)
-            for cloud in self.clouds:
-                self.viewport.blit(
-                    cloud.surface,
-                    cloud.position
-                )
+            if self.enabledClouds:
+                for cloud in self.clouds:
+                    self.viewport.blit(
+                        cloud.surface,
+                        cloud.position
+                    )
         
     def deleteClouds(self):
         self.clouds = []
