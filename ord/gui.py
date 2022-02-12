@@ -156,3 +156,71 @@ class display(__basicContainer):
         """draw: draw the display.""" 
         self.__drawCursor()
         self.drawElements()
+
+#
+# frame element
+#
+
+class frame(__basicContainer):
+    def __init__(self, atDisplay: display):
+        super().__init__() # => init the basic container.
+        self.atDisplay = atDisplay
+        self.background = None
+        self.backgroundPosition = [0, 0]
+        self.fixedPosition = False
+        self.visible = True
+    
+    def tick(self, events):
+        if self.visible:
+            self.tickElements(events)
+    
+    def draw(self):
+        if self.visible:
+            if self.background:
+                self.atDisplay.atSurface.blit(self.background, self.backgroundPosition)
+            self.drawElements()
+
+#
+# label element
+#
+
+class label:
+    def __init__(self, atDisplay: display, font, string):
+        """
+        label: holds text.
+        """ 
+        self.atDisplay  = atDisplay
+        self.font       = font
+        self.string     = string
+        self.position   = [0, 0]
+        self.fixedPosition = False
+        self.surface    = None
+        self.visible    = True
+        self.__needRedraw = True
+        self.__calculatedPosition = [0, 0]
+        self.foreground = [0, 0, 0]
+    
+    def render(self):
+        self.surface = self.font.render(self.string, True, self.foreground)
+        self.__calculatedPosition = (
+            self.position 
+            if not self.fixedPosition else 
+            getPosition(self.atDisplay.atSurface, self.surface, self.position)
+        )
+        self.__needRedraw = False
+    
+    def setText(self, string: str):
+        self.string = string
+        self.__needRedraw = True
+    
+    def tick(self, events):
+        if self.__needRedraw:
+            self.render()
+    
+    def draw(self):
+        if self.surface:
+            if self.visible:
+                self.atDisplay.atSurface.blit(
+                    self.surface,
+                    self.__calculatedPosition
+                )
