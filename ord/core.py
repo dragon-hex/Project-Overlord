@@ -45,13 +45,23 @@ CPR_TYPE_FONT = 'font'
 CPR_TYPE_SPRITE = 'sprite'
 
 class contentProvider:
-    def __init__(self):
+    def __init__(self, debug=False):
+        # => basic elements.
         self.baseDir = None
         self.cache = {}
+        
+        # => case you enabled debug?
+        self.debug = debugReporter(debug)
+        self.debug.location = 'contentProvider'
+        self.debug.write("Hello from Content Provider!")
+
+        # => generate the missing texture.
         self.missingTexture = self.__generateMissingTexture()
     
     def __generateMissingTexture(self) -> pygame.Surface:
         """__generateMissingTexture: missing texture is returned by safe functions."""
+        _T = pygame.time.get_ticks()
+
         _W = 1024 ; _H = 1024
         _PW = 12  ; _PH = 12
         _P  = pygame.Surface((_PW, _PH))
@@ -62,18 +72,22 @@ class contentProvider:
                 _S.blit(
                     _P, (xIndex * _PW, yIndex * _PH)
                 )
+            
+        self.debug.write("finished in " + str(pygame.time.get_ticks() - _T) + "secs.")
         return _S
     
     def newCache(self, label, element):
         """newCache: creates cache on the list, max time: 2 minutes."""
-        maxTime = pygame.time.get_ticks() + (2 * 1000)
+        maxTime = ( pygame.time.get_ticks() + (60 * 1000) ) * 2
         self.cache[label] = [element, maxTime]
+        self.debug.write("cache %s created, estimated time to cleanup: " % label + str(maxTime) + ", now: " + str(pygame.time.get_ticks()))
     
     def cleanCache(self):
         """cleanCache: this will clean the cache."""
         # HACK: the list when changed, can raise a exception in next iter.
         for key in self.cache.keys():
             if pygame.time.get_ticks() > self.cache[key][1]:
+                self.debug.write("cache reached max time: %s" % key)
                 del self.cache[key]
                 return
     
@@ -86,8 +100,15 @@ class contentProvider:
         """__loadImage: load the surface of the image.""" 
         # TODO: use a generic file extension such as '.image'
         target = self.baseDir + base + os.sep + label + ".png"
-        imageReturned = invokeSafe(pygame.image.load, target)
-        return imageReturned.convert_alpha()
+        self.debug.write("loading image path: %s" % target)
+        imageReturned = invokeSafe(pygame.image.load, target, returnException=False)
+        if imageReturned == None:
+            # => in this case, image is none.
+            return None
+        else:
+            # => return the image with the alpha layer.
+            return imageReturned.convert_alpha()
+
 
     def getImage(self, name, base='images'):
         """getImage: get a image."""
@@ -105,6 +126,7 @@ class contentProvider:
         
     def __loadFont(self, name, size):
         target = self.baseDir + "fonts" + os.sep + name + ".dat"
+        self.debug.write("loading font from path: %s" % target)
         try:    fontReturned = pygame.font.Font(target, size)
         except: return None
         return fontReturned
@@ -130,8 +152,16 @@ class contentProvider:
         # sprites/, but you can change it here.
         SPRITE_DIR = "sprites"
         sourceImage = self.getImage(name,base=SPRITE_DIR)
+
+        if not sourceImage:
+            return False
+
         sourceMapTarget = self.baseDir + SPRITE_DIR + os.sep + name + ".json"
         sourceMap   = jsonLoad(sourceMapTarget)
+
+        if not sourceMap:
+            return False
+
         surfaces    = {} if ordered else []
         for spriteKeys in sourceMap.keys():
             size    = sourceMap.get(spriteKeys)['size']
@@ -155,37 +185,44 @@ class contentProvider:
         """getContentByRequest: request the content."""
         eName = data.get("name")
         eType = data.get("type")
+
+        self.debug.write("loading element: %s, type: %s" % (eName, eType))
+
         if eType == CPR_TYPE_SPRITE:
             only = data.get("only")
             if not only:
                 return self.getSprites(eName)
             else:
+                self.debug.write("loading only sprites: %s" % str(only))
                 orderedDict = self.getSprites(eName, ordered=True)
-                toReturn = []
-                for key in orderedDict.keys():
-                    if key in only:
-                        print(key)
-                        toReturn.append(orderedDict.get(key))
-                print(toReturn)
-                return toReturn
+                if not orderedDict:
+                    return False
+                else:
+                    toReturn = []
+                    for key in orderedDict.keys():
+                        if key in only:
+                            toReturn.append(orderedDict.get(key))
+                    return toReturn
         elif eType == CPR_TYPE_IMAGE:
             return self.getImage(eName)
         else:
             # NOTE: wut?
+            self.debug.write("getContent was unable to load element: %s" % eType)
             return None
 
 # core    
 class core:
-    def __init__(self):
+    def __init__(self, debug=False):
         """core: this is the core of overlord."""
         self.window = window()
-        self.storage= contentProvider()
+        self.storage= contentProvider(debug=debug)
         self.baseDir= None
         self.running= False
         self.modes  = []
         self.onMode = 0
+        self.debug = debug
     
-    def init(self):
+    def init(self, debug=False):
         """init: load the pygame and all the window properties."""
         cliAssertion(
             invokeSafe(pygame.init, None) != None,
