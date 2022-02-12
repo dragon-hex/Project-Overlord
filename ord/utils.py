@@ -7,11 +7,12 @@ class debugReporter:
     def __init__(self, enabled):
         self.outputs = [sys.stdout]
         self.enabled = enabled
+        self.location = 'unknown'
     
-    def write(self, string: str, location='unknown'):
+    def write(self, string: str):
         if self.enabled:
             for output in self.outputs:
-                try:    output.write(("[%s] debug: " % location) + string + "\n")
+                try:    output.write(("[%s] debug: " % self.location) + string + "\n")
                 except: 
                     # NOTE: this will break the debug.
                     self.outputs.remove(output)
@@ -72,7 +73,7 @@ def jsonLoad(file):
             acc += line
         return acc
     # test if file works.
-    if not os.path.exists(file):
+    if not os.path.isfile(file):
         return None
     file_pointer = open(file,'r')    ; to_decode = file_pointer.readlines()
     file_pointer.close()             ; decoded = [ __Strip(Line) for Line in to_decode ]
