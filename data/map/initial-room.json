@@ -1,7 +1,17 @@
 {
+    "info": {
+        "name"      : "Initial Room"
+    },
+
     "player": {
         "spawn"     : [0, 0]
     },
+
+    "skybox": {
+        "enableClouds":         false,
+        "backgroundColor":      [0, 0, 0]
+    },
+
     "background": {
         "texture"   : {"name":"d_floor","type":"sprite"},
         "tileSize"  : [128, 128],
@@ -24,20 +34,45 @@
             ]
         }
     },
+
     "elements": [
         {
+            // element names
             "name":                 "table_left",
             "generic":              "table00left00",
+            // element sizes
             "position":             [2, 0],
             "size":                 [128, 128],
+            // element collision size
+            "collision": {
+                "enabled":          true,
+                "use":              "modified",
+                "xSize":            78,
+                "ySize":            128,
+                "xPos":             50,
+                "yPos":             0
+            },
+            // texture settings
             "textureUpdateTime":    0.3,
             "texture":              {"type":"sprite","name":"r_table","only":["table00"]}
         },
         {
+            // element name
             "name":                 "table_right",
             "generic":              "table00right00",
+            // positions and size
             "position":             [3, 0],
             "size":                 [128, 128],
+            // element collision
+            "collision": {
+                "enabled":          true,
+                "use":              "modified",
+                "xSize":            111,
+                "ySize":            128,
+                "xPos":             0,
+                "yPos":             0
+            },
+            // texture
             "textureUpdateTime":    0.3,
             "texture":              {"type":"sprite","name":"r_table","only":["table01"]}
         }
