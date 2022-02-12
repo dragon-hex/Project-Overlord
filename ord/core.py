@@ -87,7 +87,7 @@ class contentProvider:
         # TODO: use a generic file extension such as '.image'
         target = self.baseDir + base + os.sep + label + ".png"
         imageReturned = invokeSafe(pygame.image.load, target)
-        return imageReturned
+        return imageReturned.convert_alpha()
 
     def getImage(self, name, base='images'):
         """getImage: get a image."""
