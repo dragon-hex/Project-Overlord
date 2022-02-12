@@ -367,6 +367,38 @@ class world:
                     )
         else:
             self.crash("Unknown background generation method: '%s' in '%s' level." % (generationInstruction.get("method"), world.name))
+    
+    def __getRandomMessage(self):
+        __messages = [
+            "I don't know english!",
+            "Oh goodbye, the night and day...",
+            "I didn't expect this!",
+            "Sakura one of the culprits!",
+            "I was sleeping when this happened.",
+            "Sorry! I didn't mean to!",
+            "Pixel, was it your fault?",
+            "A bug just sit...",
+            "Creepy Creeper?",
+            "Thanks for watching!",
+            "Underwater",
+            "I have nothing to say!",
+            "Buso Renkin!",
+            "Strange noises came from [...]",
+            "Nothing to see here!",
+            "A little empty around here.",
+            "This message was loaded in the init.",
+            "Imagine reading the source code to gather the secret?",
+            "Windows96",
+            "Linux is cool, IMARITHE?",
+            "ごめんバカ",
+            "You know this font supports japanese?",
+            "Look behind you...",
+            "Look front you...",
+            "I'm a alien! don't you see?",
+            "Strange project.",
+            "Project Overlord? more like overload my memory!"
+        ]
+        return random.choice(__messages)
 
     def __initPanicDisplay(self):
         # => build the panic frame <=
@@ -377,24 +409,35 @@ class world:
 
         hugeFont    = self.core.storage.getFont("normal", 24)
         littleFont  = self.core.storage.getFont("normal", 14)
+        mediumFont  = self.core.storage.getFont("normal", 16)
         
         # => use 50% and 30% for the center, but Y above a bit..
         self.mainInformativeText = label(self.coreDisplay, hugeFont, "The game has crashed!")
         self.mainInformativeText.fixedPosition = True
         self.mainInformativeText.position = [50, 30]
 
+        self.errorMessage = label(self.coreDisplay, mediumFont, self.__getRandomMessage())
+        self.errorMessage.fixedPosition = True
+        self.errorMessage.position = [50, 35]
+
+        self.mainErrorLabel = label(self.coreDisplay, hugeFont, "Error")
+        self.mainErrorLabel.fixedPosition = True
+        self.mainErrorLabel.position = [50, 60]
+
         self.mainError = label(self.coreDisplay, littleFont, "Not collected yet.")
         self.mainError.fixedPosition = True
-        self.mainError.position = [50, 90]
+        self.mainError.position = [50, 65]
 
         self.mainStatus = label(self.coreDisplay, littleFont, "N/A...")
         self.mainStatus.fixedPosition = True
-        self.mainStatus.position = [0 , 100]
+        self.mainStatus.position = [1 , 99]
 
         # => append all the elements <=
         self.panicFrame.addElement(self.mainInformativeText)
         self.panicFrame.addElement(self.mainError)
         self.panicFrame.addElement(self.mainStatus)
+        self.panicFrame.addElement(self.mainErrorLabel)
+        self.panicFrame.addElement(self.errorMessage)
         self.coreDisplay.addElement(self.panicFrame)
 
     def initDisplayComponents(self):
@@ -571,6 +614,8 @@ class world:
                     self.resetHides()
                 if event.key == pygame.K_F5:
                     self.debugHitboxes = not self.debugHitboxes
+                if event.key == pygame.K_F6:
+                    self.crash("I triggered this error! I'm very dumb!")
                     
         # NOTE: the clouds are processed before everything 
         # since they only appear on the background.
