@@ -108,7 +108,10 @@ class wElement:
     genericName = None
 
     size = None
-    rect = None
+
+    # collision boxes and draw positions
+    drawRect = None
+    collisionRect = None
     position = None
 
     # NOTE: textureData is used for re-spawn the element texture
@@ -135,8 +138,11 @@ class wStore:
         self.backgroundData = None
         self.playerData = None
         self.elementData = None
+        self.infoData = None
         self.cameraRect = pygame.Rect((0, 0), (0, 0))
         self.elements = []
+        self.skyboxData = None
+        self.name = None
 
 #
 # world: main functions.
@@ -152,7 +158,7 @@ class world:
         self.debug.write("Hello! You enabled debug!",location=__name__)
         
         # viewport and drawing stuff.
-        self.viewport = pygame.Surface(self.core.window.surface.get_size())
+        self.viewport = pygame.Surface(self.core.window.surface.get_size(), pygame.SRCALPHA)
         self.viewportPosition = [0, 0]
 
         # world storage
@@ -164,9 +170,46 @@ class world:
         # Some debug functions!
         self.hideWorld = False
         self.hidePlayer = False
+        self.debugHitboxes = True
 
     def dmsg(self, string: str):
         self.debug.write(string, location=__name__)
+    
+    def crash(self, reason: str):
+        """
+        crash: show the error screen and try to save the game.
+        """
+        
+        # => adjust the elements <=
+        self.mainError.setText('"%s"' % str(reason))
+        self.mainStatus.setText("You can safely close the window...")
+        self.panicFrame.visible = True
+        insideCrash = True
+
+        # => create a crash loop <=
+        while insideCrash:
+            events = pygame.event.get()
+
+            for event in events:
+                if event.type == pygame.QUIT:
+                    insideCrash = False
+            
+            # => clean the viewport <=
+            self.cleanViewport()
+
+            self.coreDisplay.tick(events)
+            self.coreDisplay.draw()
+
+            self.updateViewport()
+            pygame.display.flip()
+        
+        # quit the program due instable envirolment.
+        exit(-1)
+    
+    def makeSure(self, condition, atError: str):
+        """makeSure: automatically crash the program."""
+        if not condition:
+            self.crash(atError)
     
     #
     # init functions
@@ -176,9 +219,11 @@ class world:
         """loadWorldByName: load the world by it's name."""
 
         extractTarget = self.core.baseDir + "map" + os.sep + name + format
-        self.dmsg("loading map file: %s" % extractTarget)
+        self.makeSure(os.path.isfile(extractTarget), "File not found: %s" % extractTarget)
 
+        self.dmsg("loading map file: %s" % extractTarget)
         extractedInfo = jsonLoad(extractTarget)
+
         self.loadWorldByData(extractedInfo)
     
     def loadPlayerSpawn(self, world: wStore):
@@ -193,6 +238,12 @@ class world:
         
     def finalize(self, world: wStore):
         """finalize: do some final stuff to the world.""" 
+        self.skyBox.background = world.skyboxData.get("backgroundColor")
+        self.makeSure(
+            self.skyBox.background and isinstance(self.skyBox.background, list),
+            "invalid skybox background color."
+        )
+        self.skyBox.enabledClouds = world.skyboxData.get("enableClouds")
         world.cameraRect = pygame.Rect((0, 0), world.background.get_size())
 
     def loadWorldByData(self, data):
@@ -201,6 +252,17 @@ class world:
         protoWorld.backgroundData   = data.get("background")
         protoWorld.elementData      = data.get("elements")
         protoWorld.playerData       = data.get("player")
+        protoWorld.skyboxData       = data.get("skybox")
+        protoWorld.infoData         = data.get("info")
+
+        self.makeSure(protoWorld.backgroundData != None,    "background not defined.")
+        self.makeSure(protoWorld.elementData != None,       "element not defined.")
+        self.makeSure(protoWorld.playerData != None,        "player not defined.")
+        self.makeSure(protoWorld.skyboxData != None,        "skybox not defined.")
+        self.makeSure(protoWorld.infoData != None,          "info not defined.")
+
+        protoWorld.name             = protoWorld.infoData.get("name")
+        self.makeSure(protoWorld.name != None, "World has no name set up!")
 
         # -- init the world loading process! --
         # generateBackground() -> spawnElements() -> finalize()
@@ -226,13 +288,21 @@ class world:
         # TODO: assert the elements on the next release!
         texturesLoad = self.core.storage.getContentByRequest(world.backgroundData.get("texture"))
         generationInstruction = world.backgroundData.get("generate")
+        self.makeSure(generationInstruction != None, "not defined background generation instruction!")
         
+        seedUsing = generationInstruction.get("seed") or 1
+
         # !! INIT RANDOM & SIZES !!
         __randomGenerator = random.Random()
-        __randomGenerator.seed(generationInstruction.get("seed"))
+        __randomGenerator.seed(seedUsing)
 
         _W  = world.backgroundData.get("size")[0]       ; _H = world.backgroundData.get("size")[1]
         _TW = world.backgroundData.get("tileSize")[0]   ; _TH = world.backgroundData.get("tileSize")[1]
+
+        self.makeSure(_W != None and isinstance(_W, int), "Background width was not set or invalid value!")
+        self.makeSure(_H != None and isinstance(_H, int), "Background height was not set or invalid value!")
+        self.makeSure(_TW != None and isinstance(_TW, int), "Background tiles width was set or invalid value!")
+        self.makeSure(_TH != None and isinstance(_TH, int), "Background tiles height was not set or invalid value!")
 
         # TODO: implement the other ways to generate the world!
         if generationInstruction.get("method") == "random":
@@ -295,10 +365,45 @@ class world:
                         texture,
                         (xIndex * _TW, yIndex * _TH)
                     )
+        else:
+            self.crash("Unknown background generation method: '%s' in '%s' level." % (generationInstruction.get("method"), world.name))
+
+    def __initPanicDisplay(self):
+        # => build the panic frame <=
+        self.panicFrame = frame(self.coreDisplay)
+        self.panicFrame.background = pygame.Surface(self.viewport.get_size())
+        self.panicFrame.background.fill((255, 255, 255))
+        self.panicFrame.visible = False
+
+        hugeFont    = self.core.storage.getFont("normal", 24)
+        littleFont  = self.core.storage.getFont("normal", 14)
+        
+        # => use 50% and 30% for the center, but Y above a bit..
+        self.mainInformativeText = label(self.coreDisplay, hugeFont, "The game has crashed!")
+        self.mainInformativeText.fixedPosition = True
+        self.mainInformativeText.position = [50, 30]
+
+        self.mainError = label(self.coreDisplay, littleFont, "Not collected yet.")
+        self.mainError.fixedPosition = True
+        self.mainError.position = [50, 90]
+
+        self.mainStatus = label(self.coreDisplay, littleFont, "N/A...")
+        self.mainStatus.fixedPosition = True
+        self.mainStatus.position = [0 , 100]
+
+        # => append all the elements <=
+        self.panicFrame.addElement(self.mainInformativeText)
+        self.panicFrame.addElement(self.mainError)
+        self.panicFrame.addElement(self.mainStatus)
+        self.coreDisplay.addElement(self.panicFrame)
 
     def initDisplayComponents(self):
         """initDisplayComponents: init all the display components."""
+        # => init the core display <=
         self.coreDisplay = display(self.viewport)
+        
+        # => init the panic display <=
+        self.__initPanicDisplay()
 
     def init(self):
         """init: init the player and the world."""
@@ -333,12 +438,45 @@ class world:
 
         protoElement.position           = elementPos
         protoElement.size               = elementSize
-        protoElement.collide            = element.get("collide")
 
-        protoElement.rect = pygame.Rect(
+        # => load the collision rectangle <=
+        # NOTE: this can be described inside the rectangle itself.
+        xDrawPosition = tileSize[0] * elementPos[0]
+        yDrawPosition = tileSize[1] * elementPos[1]
+
+        collisionData = element.get("collision")
+        protoElement.collide = collisionData.get("enabled") or False
+
+        if protoElement.collide:
+            # NOTE: case you want to collide.
+            if collisionData.get("use") == "fill":
+                # => just set the normality <=
+                xSize = tileSize[0]
+                ySize = tileSize[1]
+                xPosition = xDrawPosition
+                yPosition = yDrawPosition
+            elif collisionData.get("use") == "modified":
+                # => load the mods <=
+                xSize = collisionData.get("xSize")
+                ySize = collisionData.get("ySize")
+                xPos  = collisionData.get("xPos")
+                yPos  = collisionData.get("yPos")
+
+                # NOTE: the offset is made from the (0, 0) position.
+                xPosition = xDrawPosition + xPos
+                yPosition = yDrawPosition + yPos
+            else:
+                # TODO: crash here.
+                return
+
+            # build the rect here.
+            protoElement.collisionRect = pygame.Rect((xPosition, yPosition), (xSize, ySize))
+
+        # => load the drawing rectangle <=
+        protoElement.drawRect = pygame.Rect(
             (
-                tileSize[0] * elementPos[0],
-                tileSize[1] * elementPos[1],
+                xDrawPosition,
+                yDrawPosition,
             ),
             elementSize
         )
@@ -349,8 +487,14 @@ class world:
     def moveWorld(self, world: wStore, xDir: int, yDir: int):
         """moveWorld: to move the world objects.""" 
         for element in world.elements:
-            element.rect.x += xDir
-            element.rect.y += yDir
+            # update it's position!
+            element.drawRect.x += xDir
+            element.drawRect.y += yDir
+
+            # NOTE: case this sprite has collision.
+            if element.collisionRect:
+                element.collisionRect.x += xDir
+                element.collisionRect.y += yDir
 
     def walk(self, world: wStore, xDir: int, yDir: int):
         """walk: this function will check for collisions."""
@@ -368,8 +512,10 @@ class world:
         
         # !! CHECK FOR ELEMENTS !! ##
         for element in world.elements:
-            if playerCollisionTest.colliderect(element.rect):
+            if playerCollisionTest.colliderect(element.collisionRect):
                 return
+        
+        # !! move the camera !!
         world.cameraRect.x += xDir
         world.cameraRect.y += yDir
         self.moveWorld(world, xDir, yDir)
@@ -393,10 +539,11 @@ class world:
 
     def resetHides(self):
         """resetHides: reset everything."""
+        # reset the clouds
         self.dmsg("reseting draw...")
-        
         self.skyBox.deleteClouds()
 
+        # hide the player.
         self.hidePlayer = False
         self.hideWorld  = False
 
@@ -415,16 +562,15 @@ class world:
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F1:
-                    self.dmsg("hiding player...")
                     self.hidePlayer = not self.hidePlayer
                 if event.key == pygame.K_F2:
-                    self.dmsg("hiding world...")
                     self.hideWorld = not self.hideWorld
                 if event.key == pygame.K_F3:
-                    self.dmsg("hiding skybox...")
                     self.skyBox.enabled = not self.skyBox.enabled
                 if event.key == pygame.K_F4:
                     self.resetHides()
+                if event.key == pygame.K_F5:
+                    self.debugHitboxes = not self.debugHitboxes
                     
         # NOTE: the clouds are processed before everything 
         # since they only appear on the background.
@@ -487,7 +633,7 @@ class world:
             if element.textureType == ELEMENT_TEX_SPRITE:
                 self.viewport.blit(
                     element.texture[element.textureIndex],
-                    element.rect
+                    element.drawRect
                 )
 
     def drawWorld(self, world: wStore):
@@ -502,6 +648,16 @@ class world:
     def drawGuis(self):
         """drawGuis: basically draw all the GUI's"""
         self.coreDisplay.draw()
+    
+    def __showHitboxes(self, world: wStore):
+        for element in world.elements:
+            # NOTE: draw the hitbox.
+            hitbox = pygame.Surface((element.collisionRect.w, element.collisionRect.h), pygame.SRCALPHA)
+            hitbox.fill((0, 0, 0, 100))
+            self.viewport.blit(
+                hitbox,
+                element.collisionRect
+            )
 
     def draw(self):
         """draw: draw the game elements."""
@@ -509,6 +665,7 @@ class world:
             # cleanScreen -> cleanViewport [clean stage]
             self.cleanScreen()
             self.cleanViewport()
+
             # NOTE: draw the skybox.
             self.skyBox.draw()
 
@@ -516,8 +673,14 @@ class world:
             if self.world:
                 self.drawWorld(self.world)
                 self.drawPlayer()
+
+            # debug the hitboxes, case enabled.
+            if self.debugHitboxes:
+                self.__showHitboxes(self.world)
+
             # NOTE: draw the GUI's case enabled
             self.coreDisplay.draw()
+
             # updateViewport -> updateScreen
             self.updateViewport()
             self.updateScreen()
