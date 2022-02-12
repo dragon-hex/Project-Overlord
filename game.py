@@ -53,7 +53,7 @@ class game:
         """init: init the engine!"""
         
         self.loadArgs(sys.argv)
-        self.ordCore = ord.core()
+        self.ordCore = ord.core(debug=self.enableDebug)
 
         # NOTE: case the game dir is not initialized, then use default option.
         if not self.baseDir:
