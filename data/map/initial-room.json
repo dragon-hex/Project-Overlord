@@ -3,6 +3,13 @@
         "name"      : "Initial Room"
     },
 
+    "scripts": [
+        {
+            "name":             "Block",
+            "target":           "hello"
+        }
+    ],
+
     "player": {
         "spawn"     : [0, 0]
     },
