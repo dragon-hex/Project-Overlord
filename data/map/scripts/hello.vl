@@ -1,0 +1,4 @@
+main:
+    data    mesg, "hey!"
+    move    mesg, r0
+    call    print
