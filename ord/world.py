@@ -134,14 +134,23 @@ class wElement:
 class wStore:
     def __init__(self):
         """wStore: store the current world or room.""" 
-        self.background = None
         self.backgroundData = None
         self.playerData = None
         self.elementData = None
         self.infoData = None
-        self.cameraRect = pygame.Rect((0, 0), (0, 0))
-        self.elements = []
         self.skyboxData = None
+        self.scriptData = None
+
+        # => background <=
+        self.background = None
+
+        # => view & camera <=
+        self.cameraRect = pygame.Rect((0, 0), (0, 0))
+
+        # => elements <=
+        self.elements = []
+
+        # => world info <=
         self.name = None
 
 #
@@ -166,6 +175,7 @@ class world:
 
         # world storage
         self.world = None
+        self.scriptPool = []
 
         # NOTE: the skybox properties.
         self.skyBox = skyBox(self.viewport)        
@@ -245,6 +255,51 @@ class world:
         )
         self.skyBox.enabledClouds = world.skyboxData.get("enableClouds")
         world.cameraRect = pygame.Rect((0, 0), world.background.get_size())
+    
+    def injectCoreFunctions(self, instance: interpreter):
+        self.debug.write("injecting the core functions on thread: %s" % instance.name)
+
+        # => set the variables.
+        instance.set_var("INSIDE_OVERLORD", 1)
+        instance.set_var("USING_VM", "1")
+
+        # => print function()
+        instance.new_label("print", ["sysc", "0", "retn"])
+
+    def loadScript(self, name: str, script: str) -> interpreter:
+        """loadScripts: load the scriptlet."""
+        extractTarget = self.core.baseDir + "map" + os.sep + "scripts/" + script + ".vl"
+        self.debug.write("loading script: %s" % extractTarget)
+        if os.path.isfile(extractTarget):
+            # => begin to load the script <=
+            protoScriptDebug = debugReporter(self.debug.enabled)
+            protoScriptDebug.location = "script: %s" % name
+            protoScript = load_file(extractTarget)
+
+            # => inject some stuff inside the intepreter <=
+            protoScript.output = protoScriptDebug
+            protoScript.name = name
+
+            # => print function <=
+            self.injectCoreFunctions(protoScript)
+            self.debug.write("finished loading script %s!" % name)
+
+            return protoScript
+        else:
+            self.crash("script '%s' file not found: '%s'" % (name, extractTarget))
+
+    def initScripts(self, world: wStore):
+        """initScripts: init the script."""
+        for script in world.scriptData:
+            # => script load information.
+            scriptName = script.get("name")
+            scriptTarget = script.get("target")
+            
+            # => load the file.
+            script = self.loadScript(scriptName, scriptTarget)
+
+            # => append the script here.
+            self.scriptPool.append(script)
 
     def loadWorldByData(self, data):
         """loadWorldByData: load the world by the json (aka. dict) information."""
@@ -254,14 +309,16 @@ class world:
         protoWorld.playerData       = data.get("player")
         protoWorld.skyboxData       = data.get("skybox")
         protoWorld.infoData         = data.get("info")
+        protoWorld.scriptData       = data.get("scripts")
 
         self.makeSure(protoWorld.backgroundData != None,    "background not defined.")
         self.makeSure(protoWorld.elementData != None,       "element not defined.")
         self.makeSure(protoWorld.playerData != None,        "player not defined.")
         self.makeSure(protoWorld.skyboxData != None,        "skybox not defined.")
         self.makeSure(protoWorld.infoData != None,          "info not defined.")
+        self.makeSure(protoWorld.scriptData != None,        "script not defined.")
 
-        protoWorld.name             = protoWorld.infoData.get("name")
+        protoWorld.name = protoWorld.infoData.get("name")
         self.makeSure(protoWorld.name != None, "World has no name set up!")
 
         # -- init the world loading process! --
@@ -279,6 +336,10 @@ class world:
         # loadPlayerSprites() -> loadPlayerSpawn()
         self.loadPlayerSpawn(protoWorld)
         self.debug.write("loading player spawn...")
+
+        # -- init the scripts --
+        self.initScripts(protoWorld)
+        self.debug.write("loading the scripts...")
 
         # set the current world as the proto one.
         self.world = protoWorld
@@ -593,6 +654,17 @@ class world:
         # hide the player.
         self.hidePlayer = False
         self.hideWorld  = False
+    
+    def tickScripts(self):
+        # 1° run the script
+        for script in self.scriptPool:
+            result = script.step()
+
+        # 2° check for dead scripts
+        for script in self.scriptPool:
+            if not script.running:
+                self.debug.write("%s has finished task, removing!" % script.name)
+                self.scriptPool.remove(script)
 
     def tick(self, events):
         """tick: process all the game events."""
@@ -638,6 +710,7 @@ class world:
             self.walk(self.world, self.player.speed, 0)
         
         # NOTE: tick all the guis!
+        self.tickScripts()
         self.coreDisplay.tick(events)
         self.tickWorldElements(self.world)
 
