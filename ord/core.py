@@ -9,7 +9,7 @@ class window:
         self.surface    = None
         self.title      = 'Overlord Project'
         self.icon       = None
-        self.size       = [800, 600]
+        self.size       = [850, 600]
     
     def generateIcon(self):
         """generateWindow: generate the window icon."""
