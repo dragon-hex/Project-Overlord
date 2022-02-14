@@ -7,6 +7,10 @@
         {
             "name":             "Block",
             "target":           "hello"
+        },
+        {
+            "name":             "another-script",
+            "target":           "another-script"
         }
     ],
 
