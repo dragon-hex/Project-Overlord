@@ -1,5 +1,7 @@
 # lance is vela, but interpreted, this will not compile your code.
 
+import random # => for random number engine.
+
 VERSION_STR = "1.0"
 
 class not_closed_string(Exception):
@@ -161,20 +163,49 @@ class interpreter:
         # if the machine is running.
         self.running = True
 
+        # => flat code & prepare to execution <=
+        self.__prepare()
+
+        # => setup the syscalls <=
+        self.__random_generator = random.Random()
+
+        self.__setup_syscalls()
+        self.__load_syscalls_utils()
+
+        # => load the opcodes <=
+        self.__load_opcodes()
+    
+    def __load_syscalls_utils(self):
+        sysc_table = [
+            "sysc_term_show",
+            "sysc_term_input",
+            "sysc_debug_regs",
+            "sysc_debug_vars",
+            "sysc_random_numbers",
+            "sysc_set_seed"
+        ]
+        # => map all the syscalls <=
+        for index in range(0,len(sysc_table)):
+            self.set_var(sysc_table[index], index)
+
+    def __setup_syscalls(self):
         # setup the syscalls
         self.syscalls = [
-            # => show the content of the r0 register.
+            # => show input & output <=
             self.__term_show,
-            # => get the terminal output and store in r0.
             self.__term_get,
-            # => show the registers.
-            self.__debug_regs,
-            # => show the variables.
-            self.__debug_vars,
-            # => show the interpreter.
-            self.__exit_interpreter,
-        ]
 
+            # => debugging stuff <=
+            self.__debug_regs,
+            self.__debug_vars,
+
+            # => random numbers <=
+            self.__sysc_random_numbers,
+            self.__sysc_set_seed
+        ]
+    
+    def __load_opcodes(self):
+        """load the opcodes!"""
         # setup the opcode table.
         self.op_dict = {
 
@@ -212,47 +243,61 @@ class interpreter:
             # string operations.
             'smgr': [2, self.perf_smgr],
             'spop': [2, self.perf_spop],
-            'stin': [2, self.perf_stin]
+            'stin': [2, self.perf_stin],
+            'sadd': [2, self.perf_sadd],
+            'inst': [2, self.perf_inst]
         }
     
     def __exit_interpreter(self):
         self.code = self.regs[0]
         self.running = False
+    
+    def __sysc_set_seed(self, interpreter):
+        seed = self.regs[0]
+        if isinstance(seed, int):
+            self.__random_generator(seed)
 
-    def __debug_regs(self):
+    def __sysc_random_numbers(self, interpreter):
+        min_r   = self.regs[0]
+        max_r   = self.regs[1]
+        if isinstance(min_r, int) and isinstance(max_r, int):
+            num_g = self.__random_generator.randint(min_r, max_r)
+            self.regs[2] = num_g
+
+    def __debug_regs(self, interpreter):
         """ print the registers! """
         if self.output:
-            self.output.write("[Registers -- r0 => r10]\n")
+            self.output.write("lance: [Registers -- r0 => r10]")
             for index in range(0, 10+1):
                 # TODO: optimize this code.
-                self.output.write("[%d] type = %s: %s\n" % (
+                self.output.write("lance: [%d] type = %s: %s" % (
                     index,
                     str(type(self.regs[index])),
                     str(self.regs[index])
                 ))
-            self.output.write("[end of the registers]\n")
+            self.output.write("lance: [end of the registers]")
     
-    def __debug_vars(self):
+    def __debug_vars(self, interpreter):
         """ print the vars! """
         if self.output:
-            self.output.write("[Vars: There are %d vars]\n" % len(self.vars.keys()))
+            self.output.write("lance: [Vars: There are %d vars]" % len(self.vars.keys()))
             for key in self.vars.keys():
-                self.output.write("[%s] type = %s, value = %s\n" % (
+                self.output.write("lance: [%s] type = %s, value = %s" % (
                     key,
                     str(type(self.vars[key])),
                     str(self.vars[key])
                 ))
-            self.output.write("[end of the vars]\n")
+            self.output.write("lance: [end of the vars]")
     
-    def __term_show(self):
+    def __term_show(self, interpreter):
         # show something on the screen.
         if self.output:
             self.output.write(str(self.regs[0]) if self.regs[0] != -10 else '\n')
     
-    def __term_get(self):
+    def __term_get(self, interpreter):
         self.regs[0] = input()
 
-    def setup(self):
+    def __prepare(self):
         """
         Adequate your organized code to the linear style of execution, also
         initializes the registers and the core variables.
@@ -330,6 +375,18 @@ class interpreter:
         if not eval:
             self.error(err, code)
             raise interpreter_err("%s" % err)
+
+    def perf_sysc(self, args):
+        invoke = args[0]
+        invoke = self.__get_value_quick(invoke)
+        self.__make_sure(
+            (
+                isinstance(invoke, int) and
+                invoke < len(self.syscalls)
+            ), 
+            "invalid syscall %s!" % str(invoke), ERR_INVALID_SYSCALL
+        )
+        self.syscalls[invoke](self)
     
     def perf_spop(self, args):
         # => remove last char from a string.
@@ -338,6 +395,19 @@ class interpreter:
         source_v = self.__get_value_quick(source)
         self.__set_value_quick(target, source_v[len(source_v)-1])
         self.__set_value_quick(source, source_v[0:len(source_v)-1])
+
+    def perf_sadd(self, args):
+        # => add a string...
+        pass
+    
+    def perf_inst(self, args):
+        # transform something into string
+        # and move to the destination.
+        source = args[0]
+        source = str(self.__get_value_quick(source))
+
+        target = args[1]
+        self.__set_value_quick(target, source)
 
     def perf_stin(self, args):
 
@@ -365,7 +435,9 @@ class interpreter:
 
         source_v = self.__get_value_quick(source)
         target_v = self.__get_value_quick(target)
-        self.__set_value_quick(target, target_v + source_v)
+        final_mgr = target_v + source_v
+
+        self.__set_value_quick(target, final_mgr)
 
     def perf_add(self, args):
         x = args[0]
@@ -473,12 +545,6 @@ class interpreter:
         value = self.__get_value_quick(value)
         # set the value.
         self.vars[vname]=value
-
-    def perf_sysc(self, args):
-        invoke = args[0]
-        invoke = self.__get_value_quick(invoke)
-        self.__make_sure(invoke < len(self.syscalls), "invalid syscall %s!" % str(invoke), ERR_INVALID_SYSCALL)
-        self.syscalls[invoke]()
     
     def perf_move(self, args):
         # move the target
@@ -542,7 +608,6 @@ def load_file(fname: str) -> interpreter:
     
     # 3° init the interpreter
     interpreter_instance=interpreter(organized_code)
-    interpreter_instance.setup()
 
     # return the instance to execute.
     return interpreter_instance
