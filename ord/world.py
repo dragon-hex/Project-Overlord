@@ -256,12 +256,44 @@ class world:
         self.skyBox.enabledClouds = world.skyboxData.get("enableClouds")
         world.cameraRect = pygame.Rect((0, 0), world.background.get_size())
     
+    # functions for the interpreter #
+    def __sysc_show_hello(self, instance: interpreter):
+        instance.regs[0] = "Hello Dude!"
+    
+    def __sysc_get_position(self, instance: interpreter):
+        # => return the world position of the player.
+        
+        # NOTE: to find the player position relative to the map, we just need to
+        # remove the player distance on the screen and convert it to the map
+        # constants!
+
+        playerX = 0 + self.world.cameraRect.x
+        playerX = abs(playerX - self.player.rect.x)
+        
+        playerY = 0 + self.world.cameraRect.y
+        playerY = abs(playerY - self.player.rect.y)
+
+        # set to r0 the Xpos and r1 the Ypos
+        instance.regs[0] = playerX
+        instance.regs[1] = playerY
+
     def injectCoreFunctions(self, instance: interpreter):
         self.debug.write("injecting the core functions on thread: %s" % instance.name)
 
         # => set the variables.
         instance.set_var("INSIDE_OVERLORD", 1)
         instance.set_var("USING_VM", "1")
+
+        # => load the opcodes!
+        n_opcodes = len(instance.syscalls)
+        table = [
+            ["sysc_show_hello", self.__sysc_show_hello],
+            ["sysc_get_position", self.__sysc_get_position]
+        ]
+        for tableIndex in range(0, len(table)):
+            instance.syscalls.append(table[tableIndex][1])
+            instance.set_var(table[tableIndex][0], n_opcodes + tableIndex)
+        print(instance.vars)
 
         # => print function()
         instance.new_label("print", ["sysc", "0", "retn"])
@@ -271,6 +303,7 @@ class world:
         extractTarget = self.core.baseDir + "map" + os.sep + "scripts/" + script + ".vl"
         self.debug.write("loading script: %s" % extractTarget)
         if os.path.isfile(extractTarget):
+
             # => begin to load the script <=
             protoScriptDebug = debugReporter(self.debug.enabled)
             protoScriptDebug.location = "script: %s" % name
@@ -343,6 +376,7 @@ class world:
 
         # set the current world as the proto one.
         self.world = protoWorld
+        print(self.world.cameraRect)
 
     def generateBackground(self, world: wStore):
         """generateBackground: generate the world."""
@@ -502,6 +536,38 @@ class world:
         self.panicFrame.addElement(self.mainErrorLabel)
         self.panicFrame.addElement(self.errorMessage)
         self.coreDisplay.addElement(self.panicFrame)
+    
+    def __initDebugDisplay(self):
+        """initDebugDisplay: all the elements for the debug display."""
+        self.debugFrame = frame(self.coreDisplay)
+        self.debugFrame.background = pygame.Surface((300, 300), pygame.SRCALPHA)
+        self.debugFrame.background.fill((100, 100, 100, 100))
+
+        mediumFont  = self.core.storage.getFont("normal", 16)
+
+        self.playerPositionDebugLabel = label(self.coreDisplay, mediumFont, "X: 0, Y: 0")
+        self.playerPositionDebugLabel.fixedPosition = True
+        self.playerPositionDebugLabel.position = [0, 0]
+        self.playerPositionDebugLabel.foreground = [0xff, 0xff, 0xff]
+
+        self.debugFrame.addElement(self.playerPositionDebugLabel)
+        self.coreDisplay.addElement(self.debugFrame)
+    
+    def __tickDebugDisplay(self):
+        """show the debug stuff!""" 
+
+        # NOTE: how this works? basically get how much the player has
+        # walked on the world surface and then, subtract by the distance
+        # of the player rect (centered on the screen.)
+
+        # this is always negative, we need to convert to positive number.
+        playerX = 0 + self.world.cameraRect.x
+        playerX = abs(playerX - self.player.rect.x)
+        
+        playerY = 0 + self.world.cameraRect.y
+        playerY = abs(playerY - self.player.rect.y)
+
+        self.playerPositionDebugLabel.setText("X: %d, Y: %d" % (playerX, playerY))
 
     def initDisplayComponents(self):
         """initDisplayComponents: init all the display components."""
@@ -510,6 +576,9 @@ class world:
         
         # => init the panic display <=
         self.__initPanicDisplay()
+
+        # => init debug display <=
+        self.__initDebugDisplay()
 
     def init(self):
         """init: init the player and the world."""
@@ -605,25 +674,60 @@ class world:
             if element.collisionRect:
                 element.collisionRect.x += xDir
                 element.collisionRect.y += yDir
+    
+    def __checkElementCollisions(self, world: wStore, rect: pygame.Rect):
+        for element in world.elements:
+            if rect.colliderect(element.collisionRect):
+                return True
+        return False
 
     def walk(self, world: wStore, xDir: int, yDir: int):
-        """walk: this function will check for collisions."""
-        # check if the new position will collide in something.
+        """preciseWalk: basically, the walk but with more precion."""
+        walkX = 0
+        walkY = 0
+
+        # NOTE: case walk 0, then ignore.
+        if xDir != 0:
+            maxWalkX    = 0
+            xWalk       = abs(xDir)
+            for xTest in range(0, xWalk):
+                playerCollisionTest     = self.player.rect.copy()
+                playerCollisionTest.x  -= xTest if xDir > 0 else -(xTest)
+                if not world.cameraRect.contains(playerCollisionTest):
+                    break
+                if self.__checkElementCollisions(world, playerCollisionTest):
+                    break
+                maxWalkX = xTest
+            walkX = -(maxWalkX) if xDir <= 0 else maxWalkX
+
+        if yDir != 0:
+            maxWalkY    = 0
+            yWalk       = abs(yDir)
+            for yTest in range(0, yWalk):
+                playerCollisionTest     = self.player.rect.copy()
+                playerCollisionTest.y  -= yTest if yDir > 0 else -(yTest)
+                if not world.cameraRect.contains(playerCollisionTest):
+                    break
+                if self.__checkElementCollisions(world, playerCollisionTest):
+                    break
+                maxWalkY = yTest
+            walkY = -(maxWalkY) if yDir <= 0 else maxWalkY
+
+        world.cameraRect.x += walkX
+        world.cameraRect.y += walkY
+        self.moveWorld(world, walkX, walkY)
+
+    def __walk(self, world: wStore, xDir: int, yDir: int):
+        # FIXME: remove this on the future version.
+        # TODO: this walk function is old and not precise.
         playerCollisionTest = self.player.rect.copy()
         playerCollisionTest.x -= xDir
         playerCollisionTest.y -= yDir
-        
-        # TODO: this is not a fancy way to check if the player is
-        # going outside, but for now, keep as it.
         if not world.cameraRect.contains(playerCollisionTest):
             return
-        
-        # !! CHECK FOR ELEMENTS !! ##
         for element in world.elements:
             if playerCollisionTest.colliderect(element.collisionRect):
                 return
-        
-        # !! move the camera !!
         world.cameraRect.x += xDir
         world.cameraRect.y += yDir
         self.moveWorld(world, xDir, yDir)
@@ -657,8 +761,17 @@ class world:
     
     def tickScripts(self):
         # 1° run the script
+        SCRIPT_STEP_PER_TICK = 5
+
+        timeTaken = 0
         for script in self.scriptPool:
-            result = script.step()
+            timeTakenCycles = pygame.time.get_ticks()
+            for n_ticks in range(0, SCRIPT_STEP_PER_TICK):
+                try:
+                    result = script.step()
+                except Exception as E:
+                    self.crash("script %s, error: %s" % (script.name, str(E)))
+            timeTaken += (pygame.time.get_ticks() - timeTakenCycles)
 
         # 2° check for dead scripts
         for script in self.scriptPool:
@@ -710,6 +823,7 @@ class world:
             self.walk(self.world, self.player.speed, 0)
         
         # NOTE: tick all the guis!
+        self.__tickDebugDisplay()
         self.tickScripts()
         self.coreDisplay.tick(events)
         self.tickWorldElements(self.world)
