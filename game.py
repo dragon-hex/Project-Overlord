@@ -1,6 +1,7 @@
 import os, sys
 import pygame
 import ord
+import time
 
 # ENUM THE FUNCTIONS
 TICK_FUNCTION = 0
@@ -68,7 +69,7 @@ class game:
         self.ordCore.init()
         
         # set the core.
-        self.ordWorld = ord.world(self.ordCore, debug=self.enableDebug)
+        self.ordWorld = ord.engine(self.ordCore, debug=self.enableDebug)
         self.ordWorld.init()
 
         self.ordCore.modes = [
@@ -82,12 +83,19 @@ class game:
         clock = pygame.time.Clock()
 
         while self.ordCore.running:
+            # register the mode.
             onMode = self.ordCore.onMode
             events = pygame.event.get()
 
+            tickBegin = time.time()
             self.ordCore.modes[onMode][TICK_FUNCTION](events)
+            self.ordCore.timeTakenByTick = (time.time() - tickBegin) * 1000
+
+            drawBegin = time.time()
             self.ordCore.modes[onMode][DRAW_FUNCTION]()
+            self.ordCore.timeTakenByDraw = (time.time() - drawBegin) * 1000
             
+            self.ordCore.averageFps = clock.get_fps()
             clock.tick(60)
     
     def quit(self):
