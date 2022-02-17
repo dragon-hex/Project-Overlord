@@ -221,6 +221,12 @@ class core:
         self.modes  = []
         self.onMode = 0
         self.debug = debug
+
+        # => statistics!
+        self.timeTakenByScripts = 0
+        self.timeTakenByDraw = 0
+        self.timeTakenByTick = 0
+        self.averageFps = 0
     
     def init(self, debug=False):
         """init: load the pygame and all the window properties."""
