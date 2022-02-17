@@ -1,6 +1,7 @@
 import pygame
 import os
 import random
+import time
 
 #
 # import modules from the project.
@@ -14,6 +15,8 @@ from .game import *
 #
 # constants.
 #
+
+REAPER_VERSION = ["1.0", 1.0]
 
 PLAYER_LOOKING_UP   = 1
 PLAYER_LOOKING_DOWN = 2
@@ -158,10 +161,10 @@ class wStore:
 #
 
 class world:
-    def __init__(self, core: core, debug=False):
+    def __init__(self, viewport: pygame.Surface, sharedCore: core, debug=False):
         """world: render out the world and everything."""
         # load all the generic stuff.
-        self.core = core
+        self.core = sharedCore
         self.player = player()
 
         # => init the debug <=
@@ -170,57 +173,24 @@ class world:
         self.debug.write("Hello! You enabled debug!")
         
         # viewport and drawing stuff.
-        self.viewport = pygame.Surface(self.core.window.surface.get_size(), pygame.SRCALPHA)
-        self.viewportPosition = [0, 0]
+        self.viewport = viewport
 
         # world storage
         self.world = None
         self.scriptPool = []
 
         # NOTE: the skybox properties.
-        self.skyBox = skyBox(self.viewport)        
+        self.skyBox = skyBox(self.viewport)
 
         # Some debug functions!
         self.hideWorld = False
         self.hidePlayer = False
         self.debugHitboxes = True
-    
-    def crash(self, reason: str):
-        """
-        crash: show the error screen and try to save the game.
-        """
-        
-        # => adjust the elements <=
-        self.mainError.setText('"%s"' % str(reason))
-        self.mainStatus.setText("You can safely close the window...")
-        self.panicFrame.visible = True
-        insideCrash = True
 
-        # => create a crash loop <=
-        while insideCrash:
-            events = pygame.event.get()
+        # events!
+        self.crash = None
+        self.makeSure = None
 
-            for event in events:
-                if event.type == pygame.QUIT:
-                    insideCrash = False
-            
-            # => clean the viewport <=
-            self.cleanViewport()
-
-            self.coreDisplay.tick(events)
-            self.coreDisplay.draw()
-
-            self.updateViewport()
-            pygame.display.flip()
-        
-        # quit the program due instable envirolment.
-        exit(-1)
-    
-    def makeSure(self, condition, atError: str):
-        """makeSure: automatically crash the program."""
-        if not condition:
-            self.crash(atError)
-    
     #
     # init functions
     #
@@ -287,13 +257,12 @@ class world:
         # => load the opcodes!
         n_opcodes = len(instance.syscalls)
         table = [
-            ["sysc_show_hello", self.__sysc_show_hello],
-            ["sysc_get_position", self.__sysc_get_position]
+            ["sysc_show_hello",     self.__sysc_show_hello],
+            ["sysc_get_position",   self.__sysc_get_position]
         ]
         for tableIndex in range(0, len(table)):
             instance.syscalls.append(table[tableIndex][1])
             instance.set_var(table[tableIndex][0], n_opcodes + tableIndex)
-        print(instance.vars)
 
         # => print function()
         instance.new_label("print", ["sysc", "0", "retn"])
@@ -376,7 +345,6 @@ class world:
 
         # set the current world as the proto one.
         self.world = protoWorld
-        print(self.world.cameraRect)
 
     def generateBackground(self, world: wStore):
         """generateBackground: generate the world."""
@@ -463,134 +431,29 @@ class world:
         else:
             self.crash("Unknown background generation method: '%s' in '%s' level." % (generationInstruction.get("method"), world.name))
     
-    def __getRandomMessage(self):
-        __messages = [
-            "I don't know english!",
-            "Oh goodbye, the night and day...",
-            "I didn't expect this!",
-            "Sakura one of the culprits!",
-            "I was sleeping when this happened.",
-            "Sorry! I didn't mean to!",
-            "Pixel, was it your fault?",
-            "A bug just sit...",
-            "Creepy Creeper?",
-            "Thanks for watching!",
-            "Underwater",
-            "I have nothing to say!",
-            "Buso Renkin!",
-            "Strange noises came from [...]",
-            "Nothing to see here!",
-            "A little empty around here.",
-            "This message was loaded in the init.",
-            "Imagine reading the source code to gather the secret?",
-            "Windows96",
-            "Linux is cool, IMARITHE?",
-            "ごめんバカ",
-            "You know this font supports japanese?",
-            "Look behind you...",
-            "Look front you...",
-            "I'm a alien! don't you see?",
-            "Strange project.",
-            "Project Overlord? more like overload my memory!"
-        ]
-        phrase = random.choice(__messages)
-        self.debug.write("game phrase selected: '%s'" % phrase)
-        return phrase
-
-    def __initPanicDisplay(self):
-        # => build the panic frame <=
-        self.panicFrame = frame(self.coreDisplay)
-        self.panicFrame.background = pygame.Surface(self.viewport.get_size())
-        self.panicFrame.background.fill((255, 255, 255))
-        self.panicFrame.visible = False
-
-        hugeFont    = self.core.storage.getFont("normal", 24)
-        littleFont  = self.core.storage.getFont("normal", 14)
-        mediumFont  = self.core.storage.getFont("normal", 16)
-        
-        # => use 50% and 30% for the center, but Y above a bit..
-        self.mainInformativeText = label(self.coreDisplay, hugeFont, "The game has crashed!")
-        self.mainInformativeText.fixedPosition = True
-        self.mainInformativeText.position = [50, 30]
-
-        self.errorMessage = label(self.coreDisplay, mediumFont, self.__getRandomMessage())
-        self.errorMessage.fixedPosition = True
-        self.errorMessage.position = [50, 35]
-
-        self.mainErrorLabel = label(self.coreDisplay, hugeFont, "Error")
-        self.mainErrorLabel.fixedPosition = True
-        self.mainErrorLabel.position = [50, 60]
-
-        self.mainError = label(self.coreDisplay, littleFont, "Not collected yet.")
-        self.mainError.fixedPosition = True
-        self.mainError.position = [50, 65]
-
-        self.mainStatus = label(self.coreDisplay, littleFont, "N/A...")
-        self.mainStatus.fixedPosition = True
-        self.mainStatus.position = [1 , 99]
-
-        # => append all the elements <=
-        self.panicFrame.addElement(self.mainInformativeText)
-        self.panicFrame.addElement(self.mainError)
-        self.panicFrame.addElement(self.mainStatus)
-        self.panicFrame.addElement(self.mainErrorLabel)
-        self.panicFrame.addElement(self.errorMessage)
-        self.coreDisplay.addElement(self.panicFrame)
-    
-    def __initDebugDisplay(self):
-        """initDebugDisplay: all the elements for the debug display."""
-        self.debugFrame = frame(self.coreDisplay)
-        self.debugFrame.background = pygame.Surface((300, 300), pygame.SRCALPHA)
-        self.debugFrame.background.fill((100, 100, 100, 100))
-
-        mediumFont  = self.core.storage.getFont("normal", 16)
-
-        self.playerPositionDebugLabel = label(self.coreDisplay, mediumFont, "X: 0, Y: 0")
-        self.playerPositionDebugLabel.fixedPosition = True
-        self.playerPositionDebugLabel.position = [0, 0]
-        self.playerPositionDebugLabel.foreground = [0xff, 0xff, 0xff]
-
-        self.debugFrame.addElement(self.playerPositionDebugLabel)
-        self.coreDisplay.addElement(self.debugFrame)
-    
-    def __tickDebugDisplay(self):
-        """show the debug stuff!""" 
-
-        # NOTE: how this works? basically get how much the player has
-        # walked on the world surface and then, subtract by the distance
-        # of the player rect (centered on the screen.)
-
-        # this is always negative, we need to convert to positive number.
-        playerX = 0 + self.world.cameraRect.x
-        playerX = abs(playerX - self.player.rect.x)
-        
-        playerY = 0 + self.world.cameraRect.y
-        playerY = abs(playerY - self.player.rect.y)
-
-        self.playerPositionDebugLabel.setText("X: %d, Y: %d" % (playerX, playerY))
-
-    def initDisplayComponents(self):
-        """initDisplayComponents: init all the display components."""
-        # => init the core display <=
-        self.coreDisplay = display(self.viewport)
-        
-        # => init the panic display <=
-        self.__initPanicDisplay()
-
-        # => init debug display <=
-        self.__initDebugDisplay()
-
     def init(self):
         """init: init the player and the world."""
-        # init the display!
-        self.initDisplayComponents()
-
         # player init!
         self.player.playerTextureGenerate()
         self.player.centerPlayer(self.viewport.get_width(), self.viewport.get_height())
 
         self.debug.write("loading temporary map...")
         self.loadWorldByName("initial-room")
+
+    #
+    # utility functions
+    #
+
+    def getInWorldPosition(self):
+        # return the player relative to world position.
+        playerX = 0 + self.world.cameraRect.x
+        playerX = abs(playerX - self.player.rect.x)
+        
+        playerY = 0 + self.world.cameraRect.y
+        playerY = abs(playerY - self.player.rect.y)
+
+        # => return the x and y.
+        return (playerX, playerY)
 
     #
     # tick functions
@@ -716,21 +579,6 @@ class world:
         world.cameraRect.x += walkX
         world.cameraRect.y += walkY
         self.moveWorld(world, walkX, walkY)
-
-    def __walk(self, world: wStore, xDir: int, yDir: int):
-        # FIXME: remove this on the future version.
-        # TODO: this walk function is old and not precise.
-        playerCollisionTest = self.player.rect.copy()
-        playerCollisionTest.x -= xDir
-        playerCollisionTest.y -= yDir
-        if not world.cameraRect.contains(playerCollisionTest):
-            return
-        for element in world.elements:
-            if playerCollisionTest.colliderect(element.collisionRect):
-                return
-        world.cameraRect.x += xDir
-        world.cameraRect.y += yDir
-        self.moveWorld(world, xDir, yDir)
     
     def updatePlayerStats(self):
         """updatePlayerStats: the player stats are shown on the top."""
@@ -761,17 +609,20 @@ class world:
     
     def tickScripts(self):
         # 1° run the script
-        SCRIPT_STEP_PER_TICK = 5
+        SCRIPT_STEP_PER_TICK = 10
 
         timeTaken = 0
         for script in self.scriptPool:
-            timeTakenCycles = pygame.time.get_ticks()
+            beginTime = time.time()
             for n_ticks in range(0, SCRIPT_STEP_PER_TICK):
                 try:
                     result = script.step()
                 except Exception as E:
                     self.crash("script %s, error: %s" % (script.name, str(E)))
-            timeTaken += (pygame.time.get_ticks() - timeTakenCycles)
+            timeTaken += ( (time.time() - beginTime) * 1000)
+        
+        # NOTE: record the time taken by the scripts.
+        self.core.timeTakenByScripts = timeTaken
 
         # 2° check for dead scripts
         for script in self.scriptPool:
@@ -781,6 +632,8 @@ class world:
 
     def tick(self, events):
         """tick: process all the game events."""
+        timeBegin = time.time()
+
         for event in events:
             if event.type == pygame.QUIT:
                 self.core.running = False
@@ -797,14 +650,12 @@ class world:
                     self.hidePlayer = not self.hidePlayer
                 if event.key == pygame.K_F2:
                     self.hideWorld = not self.hideWorld
-                if event.key == pygame.K_F3:
-                    self.skyBox.enabled = not self.skyBox.enabled
                 if event.key == pygame.K_F4:
                     self.resetHides()
                 if event.key == pygame.K_F5:
                     self.debugHitboxes = not self.debugHitboxes
                 if event.key == pygame.K_F6:
-                    self.crash("I triggered this error! I'm very dumb!")
+                    self.skyBox.enabled = not self.skyBox.enabled
                     
         # NOTE: the clouds are processed before everything 
         # since they only appear on the background.
@@ -822,30 +673,13 @@ class world:
         elif keyPress[pygame.K_LEFT] or keyPress[pygame.K_a]:
             self.walk(self.world, self.player.speed, 0)
         
-        # NOTE: tick all the guis!
-        self.__tickDebugDisplay()
-        self.tickScripts()
-        self.coreDisplay.tick(events)
+        # NOTE: the scripts should always catch the procesed data.
         self.tickWorldElements(self.world)
+        self.tickScripts()
 
     #
     # draw functions
     #
-
-    def updateScreen(self):
-        """updateScreen: update the screen."""
-        pygame.display.flip()
-    
-    def updateViewport(self):
-        """updateViewport: update the viewport."""
-        self.core.window.surface.blit(
-            self.viewport,
-            self.viewportPosition
-        )
-    
-    def cleanScreen(self):
-        """cleanScreen: clean the screen."""
-        self.core.window.surface.fill((0, 0, 0))
     
     def cleanViewport(self):
         """cleanViewport: clean the viewport."""
@@ -902,9 +736,9 @@ class world:
 
     def draw(self):
         """draw: draw the game elements."""
+        timeBegin = time.time()
         if self.core.running:
-            # cleanScreen -> cleanViewport [clean stage]
-            self.cleanScreen()
+            # cleanViewport [clean stage]
             self.cleanViewport()
 
             # NOTE: draw the skybox.
@@ -918,10 +752,3 @@ class world:
             # debug the hitboxes, case enabled.
             if self.debugHitboxes:
                 self.__showHitboxes(self.world)
-
-            # NOTE: draw the GUI's case enabled
-            self.coreDisplay.draw()
-
-            # updateViewport -> updateScreen
-            self.updateViewport()
-            self.updateScreen()
