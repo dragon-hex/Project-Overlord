@@ -2,6 +2,7 @@ import os
 import sys
 import random
 import json
+
 # class: debugReporter
 class debugReporter:
     def __init__(self, enabled):
@@ -17,6 +18,11 @@ class debugReporter:
                     # NOTE: this will break the debug.
                     self.outputs.remove(output)
                     return
+
+#
+def getPythonVersion():
+    """return the python version."""
+    return str(sys.version_info.major) + "." + str(sys.version_info.minor) + "." + str(sys.version_info.micro)
 
 #
 def randomRGBColor() -> tuple:
