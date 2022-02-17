@@ -12,8 +12,8 @@ def getPosition(baseSurface, targetSurface, position):
     """getPosition: return the position."""
     # divide the screen on 100 parts.
     position= [math.floor(position[0]), math.floor(position[1])]
-    xPos    = ( baseSurface.get_width()  )  // 100
-    yPos    = ( baseSurface.get_height() )  // 100
+    xPos    = ( baseSurface.get_width()  )  / 100
+    yPos    = ( baseSurface.get_height() )  / 100
 
     # load the offset from the 0 -> 100 position
     # this is done to prevent the element from "escaping"
@@ -70,6 +70,7 @@ class __basicContainer:
     #
     def __handleExceptionAtDraw(self, exception):
         """__handleExceptionAtDraw: when a draw error happens."""
+        print("Exception %s" % str(exception))
         if self.onDrawError:
             if callable(self.onDrawError):
                 invokeSafe(self.onDrawError, exception)
@@ -198,7 +199,7 @@ class label:
         self.visible    = True
         self.__needRedraw = True
         self.__calculatedPosition = [0, 0]
-        self.foreground = [0, 0, 0]
+        self.foreground = [255, 255, 255]
     
     def render(self):
         self.surface = self.font.render(self.string, True, self.foreground)
@@ -224,3 +225,81 @@ class label:
                     self.surface,
                     self.__calculatedPosition
                 )
+
+#
+#
+#
+class graph:
+    def __init__(self, atDisplay: display):
+        """
+        Graph: this is a very cool graph.
+        """
+        # setup the display.
+        self.atDisplay  = atDisplay
+
+        # sizes and etc.
+        self.visible    = True
+        self.size       = [100, 50]
+        self.position   = [0, 0]
+        self.fixedPosition = False
+
+        # result surface!
+        self.surface    = pygame.Surface(self.size)
+
+        # setup the background.
+        self.__backgroundSurface    = pygame.Surface(self.size,pygame.SRCALPHA)
+        self.__barSurfaces          = pygame.Surface(self.size,pygame.SRCALPHA)
+        self.__xCount   = 0
+        
+        # NOTE value can't be 0.
+        self.__value = 1
+        self.__maxValue = 1
+
+        # custom stuff
+        self.foregroundLines = (0xFF,0x00,0xFF)
+    
+    def setValue(self, value):
+        """SetValue: set the value here."""
+        self.__value = value
+    
+    def setMaxValue(self, value):
+        self.__maxValue = value
+    
+    def updateGraph(self):
+        """UpdateElement: Setup the frame on the surface."""
+        graphDivisions = self.size[1] / self.__maxValue
+        totalHeight    = math.floor(graphDivisions * self.__value)
+        totalHeight    = self.size[1] if totalHeight >= self.size[1] else totalHeight
+
+        # update the position on X.
+        if self.__xCount + 1 >= self.size[0]:
+            self.__barSurfaces.fill((0, 0, 0, 255))
+            self.__xCount = 0
+        else:
+            self.__xCount += 1
+        
+        # begin to draw the stuff on the frame.
+        pygame.draw.line(
+            self.__barSurfaces,                         # -> surface to be drawn
+            self.foregroundLines,                       # -> the color of the line
+            (self.__xCount, self.size[1]),              # -> where to begin (origin)
+            (self.__xCount, self.size[1]-totalHeight)   # -> where to end (dest)
+        )
+    
+    def tick(self, events):
+        self.updateGraph()
+    
+    def draw(self):
+        if self.visible:
+            self.surface.blit(
+                self.__barSurfaces,
+                (0, 0)
+            )
+            self.atDisplay.atSurface.blit(
+                self.surface,
+                (
+                    self.position 
+                    if not self.fixedPosition else 
+                    getPosition(self.atDisplay.atSurface, self.surface, self.position)
+                )
+            )
