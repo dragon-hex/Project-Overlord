@@ -341,7 +341,7 @@ class interpreter:
         elif token[0] in ("'",'"'):
             return token[1:len(token)-1]
         else:
-            return None
+            raise interpreter_err("invalid %s data" % token)
         
     def __set_value_quick(self, target: str, value):
         # => set the value to a target.
