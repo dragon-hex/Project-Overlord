@@ -20,7 +20,7 @@
 
     "skybox": {
         "enableClouds":         false,
-        "backgroundColor":      [0, 0, 0]
+        "backgroundColor":      [10, 10, 10]
     },
 
     "background": {
