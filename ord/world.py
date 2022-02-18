@@ -58,6 +58,7 @@ class player:
 
     # NOTE: the player health is used on some games.
     health      = 100
+    maxHealth   = 100
     experience  = 0
     level       = 0
     speed       = 4
@@ -219,10 +220,7 @@ class world:
     def finalize(self, world: wStore):
         """finalize: do some final stuff to the world.""" 
         self.skyBox.background = world.skyboxData.get("backgroundColor")
-        self.makeSure(
-            self.skyBox.background and isinstance(self.skyBox.background, list),
-            "invalid skybox background color."
-        )
+        self.makeSure(self.skyBox.background and isinstance(self.skyBox.background, list), "invalid skybox background color.")
         self.skyBox.enabledClouds = world.skyboxData.get("enableClouds")
         world.cameraRect = pygame.Rect((0, 0), world.background.get_size())
     
@@ -246,6 +244,13 @@ class world:
         # set to r0 the Xpos and r1 the Ypos
         instance.regs[0] = playerX
         instance.regs[1] = playerY
+    
+    def __sysc_set_health(self, instance: interpreter): 
+        # => set the player health
+        self.player.health = instance.regs[0]
+    
+    def __sysc_get_health(self, instance: interpreter):
+        instance.regs[0] = self.player.health
 
     def injectCoreFunctions(self, instance: interpreter):
         self.debug.write("injecting the core functions on thread: %s" % instance.name)
@@ -258,7 +263,9 @@ class world:
         n_opcodes = len(instance.syscalls)
         table = [
             ["sysc_show_hello",     self.__sysc_show_hello],
-            ["sysc_get_position",   self.__sysc_get_position]
+            ["sysc_get_position",   self.__sysc_get_position],
+            ["sysc_set_health",     self.__sysc_set_health],
+            ["sysc_get_health",     self.__sysc_get_health]
         ]
         for tableIndex in range(0, len(table)):
             instance.syscalls.append(table[tableIndex][1])
@@ -362,8 +369,8 @@ class world:
         _W  = world.backgroundData.get("size")[0]       ; _H = world.backgroundData.get("size")[1]
         _TW = world.backgroundData.get("tileSize")[0]   ; _TH = world.backgroundData.get("tileSize")[1]
 
-        self.makeSure(_W != None and isinstance(_W, int), "Background width was not set or invalid value!")
-        self.makeSure(_H != None and isinstance(_H, int), "Background height was not set or invalid value!")
+        self.makeSure(_W  != None and isinstance(_W, int),  "Background width was not set or invalid value!")
+        self.makeSure(_H  != None and isinstance(_H, int),  "Background height was not set or invalid value!")
         self.makeSure(_TW != None and isinstance(_TW, int), "Background tiles width was set or invalid value!")
         self.makeSure(_TH != None and isinstance(_TH, int), "Background tiles height was not set or invalid value!")
 
@@ -379,13 +386,7 @@ class world:
             for yIndex in range(0, _H+1):
                 for xIndex in range(0, _W+1):
                     textureChoice = __randomGenerator.choice(texturesLoad)
-                    world.background.blit( 
-                        textureChoice,
-                        (
-                            _TW * xIndex,
-                            _TH * yIndex
-                        )
-                    )
+                    world.background.blit(textureChoice, (_TW * xIndex, _TH * yIndex))
 
         elif generationInstruction.get("method") == "mapped":
             # NOTE: load the blocks texture.
@@ -424,10 +425,7 @@ class world:
                         else:
                             texture = __randomGenerator.choice(textureAdquired)
                     
-                    world.background.blit(
-                        texture,
-                        (xIndex * _TW, yIndex * _TH)
-                    )
+                    world.background.blit(texture, (xIndex * _TW, yIndex * _TH))
         else:
             self.crash("Unknown background generation method: '%s' in '%s' level." % (generationInstruction.get("method"), world.name))
     
@@ -470,12 +468,15 @@ class world:
 
         ## !! BEGIN TO BUILD THE ELEMENT !! ##
         protoElement = wElement()
+
         protoElement.name               = element.get("name")
         self.makeSure(protoElement.name != None, "no name provided for element in level '%s'" % world.name)
+        
         protoElement.genericName        = element.get("generic") or protoElement.name
         protoElement.textureType        = ELEMENT_TEX_IMAGE if textureInfo.get("type")=='image' else ELEMENT_TEX_SPRITE
         protoElement.textureUpdateTime  = element.get("textureUpdateTime") or 0.5
         protoElement.texture            = self.core.storage.getContentByRequest(textureInfo)
+        
         self.makeSure(protoElement.texture != False, "unable to load texture: %s" % textureInfo)
 
         protoElement.position           = elementPos
@@ -499,10 +500,8 @@ class world:
                 yPosition = yDrawPosition
             elif collisionData.get("use") == "modified":
                 # => load the mods <=
-                xSize = collisionData.get("xSize")
-                ySize = collisionData.get("ySize")
-                xPos  = collisionData.get("xPos")
-                yPos  = collisionData.get("yPos")
+                xSize = collisionData.get("xSize")  ;   ySize = collisionData.get("ySize")
+                xPos  = collisionData.get("xPos")   ;   yPos  = collisionData.get("yPos")
 
                 # NOTE: the offset is made from the (0, 0) position.
                 xPosition = xDrawPosition + xPos
@@ -515,13 +514,7 @@ class world:
             protoElement.collisionRect = pygame.Rect((xPosition, yPosition), (xSize, ySize))
 
         # => load the drawing rectangle <=
-        protoElement.drawRect = pygame.Rect(
-            (
-                xDrawPosition,
-                yDrawPosition,
-            ),
-            elementSize
-        )
+        protoElement.drawRect = pygame.Rect(( xDrawPosition, yDrawPosition), elementSize)
 
         # !! SAVE ELEMENT !! ##
         world.elements.append(protoElement)
@@ -614,11 +607,11 @@ class world:
         timeTaken = 0
         for script in self.scriptPool:
             beginTime = time.time()
-            for n_ticks in range(0, SCRIPT_STEP_PER_TICK):
+            for tick_counter in range(0, SCRIPT_STEP_PER_TICK):
                 try:
                     result = script.step()
                 except Exception as E:
-                    self.crash("script %s, error: %s" % (script.name, str(E)))
+                    self.crash("[%d] script %s, error: %s" % (tick_counter, script.name, str(E)))
             timeTaken += ( (time.time() - beginTime) * 1000)
         
         # NOTE: record the time taken by the scripts.
@@ -632,8 +625,6 @@ class world:
 
     def tick(self, events):
         """tick: process all the game events."""
-        timeBegin = time.time()
-
         for event in events:
             if event.type == pygame.QUIT:
                 self.core.running = False
@@ -691,48 +682,29 @@ class world:
         if not self.hidePlayer:
             playerLookingAt = self.player.lookingAt
             playerTextureIndex = self.player.textureIndex
-            self.viewport.blit(
-                self.player.textures[playerLookingAt][playerTextureIndex],
-                self.player.rect
-            )
+            self.viewport.blit(self.player.textures[playerLookingAt][playerTextureIndex], self.player.rect)
     
     def drawWorldElements(self, world: wStore):
         """drawWorldElements: draw the world elements.""" 
         for element in world.elements:
             # NOTE: select the method to draw.
             if element.textureType == ELEMENT_TEX_SPRITE:
-                self.viewport.blit(
-                    element.texture[element.textureIndex],
-                    element.drawRect
-                )
+                self.viewport.blit(element.texture[element.textureIndex], element.drawRect)
             else:
-                self.viewport.blit(
-                    element.texture,
-                    element.drawRect
-                )
+                self.viewport.blit(element.texture, element.drawRect)
 
     def drawWorld(self, world: wStore):
         """drawWorld: draw the player."""
         if not self.hideWorld:
-            self.viewport.blit(
-                world.background,
-                world.cameraRect
-            )
+            self.viewport.blit(world.background, world.cameraRect)
             self.drawWorldElements(self.world)
-
-    def drawGuis(self):
-        """drawGuis: basically draw all the GUI's"""
-        self.coreDisplay.draw()
     
     def __showHitboxes(self, world: wStore):
         for element in world.elements:
             # NOTE: draw the hitbox.
             hitbox = pygame.Surface((element.collisionRect.w, element.collisionRect.h), pygame.SRCALPHA)
             hitbox.fill((0, 0, 0, 100))
-            self.viewport.blit(
-                hitbox,
-                element.collisionRect
-            )
+            self.viewport.blit(hitbox, element.collisionRect)
 
     def draw(self):
         """draw: draw the game elements."""
