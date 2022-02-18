@@ -62,7 +62,9 @@ class engine:
             "Look front you...",
             "I'm a alien! don't you see?",
             "Strange project.",
-            "Project Overlord? more like overload my memory!"
+            "Project Overlord? more like overload my memory!",
+            "Drive Slow",
+            "xeS in Borneo"
         ]
         phrase = random.choice(__messages)
         self.debug.write("game phrase selected: '%s'" % phrase)
@@ -86,18 +88,45 @@ class engine:
             for event in events:
                 if event.type == pygame.QUIT:
                     insideCrash = False
+                if event.type == pygame.VIDEORESIZE:
+                    # NOTE: when the game is crashed, there is no reason
+                    # to resize the video.
+                    self.debug.write("video resizing on crash?")
             
             # => clean the viewport <=
-            self.cleanViewport()
+            self.viewport.fill((0, 0, 0))
 
             self.coreDisplay.tick(events)
             self.coreDisplay.draw()
 
-            self.updateViewport()
+            self.core.window.surface.blit(self.viewport, (0, 0))
             pygame.display.flip()
         
         # quit the program due instable envirolment.
         exit(-1)
+
+    def __initPlayerStatusDisplay(self):
+        # => show the player name & health
+        self.playerStatusFrame = frame(self.coreDisplay)
+        self.playerStatusFrame.background = pygame.Surface((100, 45), pygame.SRCALPHA)
+
+        mediumFont = self.core.storage.getFont("normal", 16)
+
+        self.playerStatusNameLabel = label(self.coreDisplay, mediumFont, self.world.player.name)
+        self.playerStatusNameLabel.position = [50, 96]
+        self.playerStatusNameLabel.fixedPosition = True
+
+        self.playerHealthBar = loadbar(self.coreDisplay)
+        self.playerHealthBar.backgroundColor = [100, 100, 100, 100]
+        self.playerHealthBar.size = [200, 10]
+        self.playerHealthBar.position = [50, 99]
+        self.playerHealthBar.fixedPosition = True
+        
+        self.playerHealthBar.maxValue = self.world.player.maxHealth
+
+        self.playerStatusFrame.addElement(self.playerHealthBar)
+        self.playerStatusFrame.addElement(self.playerStatusNameLabel)
+        self.coreDisplay.addElement(self.playerStatusFrame)
 
     def __initPanicDisplay(self):
         # => build the panic frame <=
@@ -155,7 +184,8 @@ class engine:
         fixedTexts = [
             "Reaper I, %s" % REAPER_VERSION[0],
             "Python %s, pygame: %s" % (getPythonVersion(), pygame.version.ver),
-            "Debugging? %s" % str(self.debug.enabled)
+            "Debugging? %s" % str(self.debug.enabled),
+            "Screen: W = %d, H = %d [Fixed]" % self.viewport.get_size()
         ]
 
         tElements   = []
@@ -222,6 +252,9 @@ class engine:
         # => init the core display <=
         self.coreDisplay = display(self.viewport)
         
+        # => init the player data <=
+        self.__initPlayerStatusDisplay()
+
         # => init the panic display <=
         self.__initPanicDisplay()
 
@@ -260,11 +293,22 @@ class engine:
         # => update the position
         self.playerPositionDebugLabel.setText("X: %d, Y: %d" % self.world.getInWorldPosition())
 
+    def atVideoResizeEvent(self, newWidth, newHeight):
+        # NOTE: resize the window! but not the game viewport!
+        pass
+
+    def updatePlayerStatusFrame(self):
+        self.playerHealthBar.maxValue = self.world.player.maxHealth
+        self.playerHealthBar.value = self.world.player.health
+
     def tick(self, events):
         for event in events:
             if event.type == pygame.QUIT:
                 self.core.running = False
                 return
+            
+            if event.type == pygame.VIDEORESIZE:
+                self.atVideoResizeEvent(event.w, event.h)
             
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F3:
@@ -272,7 +316,12 @@ class engine:
         
         # set the world tick & update the core display.
         self.__tickDebugFrame()
+
+        # => update the player stuff
+        self.updatePlayerStatusFrame()
         self.coreDisplay.tick(events)
+
+        # => update the tick
         self.world.tick(events)
     
     #
