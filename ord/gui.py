@@ -101,6 +101,12 @@ class cursor:
         self.cursorState = CURSOR_DEFAULT
         self.cursorTextureIndex = 0
         self.cursorTiming = 0
+
+        # cursor offset: this determines the offset created
+        # by the video resizing!
+        self.offsetInX = 0
+        self.offsetInY = 0
+
         self.__initTemporaryTexture()
     
     def __initTemporaryTexture(self):
@@ -115,8 +121,12 @@ class cursor:
     def tick(self):
         """tick: the mouse position."""
         (self.rect.x, self.rect.y) = pygame.mouse.get_pos()
+        
         self.rect.x -= (self.rect.width // 2)
+        self.rect.x += self.offsetInX
+
         self.rect.y -= (self.rect.height // 2)
+        self.rect.y += self.offsetInY
 
 #
 # display class
@@ -135,7 +145,15 @@ class display(__basicContainer):
     
     def tick(self, events):
         """tick: tick the main display."""
+        # NOTE: process the video resize!
         self.cursor.tick()
+
+        for event in events:
+            if event.type == pygame.VIDEORESIZE:
+                self.cursor.offsetInX = self.atSurface.get_width()  - event.w
+                self.cursor.offsetInY = self.atSurface.get_height() - event.h
+                print(self.cursor.offsetInX, self.cursor.offsetInY)
+
         self.tickElements(events)
     
     def __drawCursor(self):
@@ -170,15 +188,28 @@ class frame(__basicContainer):
         self.backgroundPosition = [0, 0]
         self.fixedPosition = False
         self.visible = True
+        self.position = None
     
+    def calculatePosition(self):
+        # => load the position quickly!
+        self.position = (
+            self.backgroundPosition
+            if not self.fixedPosition else 
+            getPosition(self.atDisplay.atSurface, self.background, self.backgroundPosition)
+        )
+
     def tick(self, events):
+        # => case there is no position!
+        if not self.position:
+            self.calculatePosition()
+
         if self.visible:
             self.tickElements(events)
     
     def draw(self):
         if self.visible:
             if self.background:
-                self.atDisplay.atSurface.blit(self.background, self.backgroundPosition)
+                self.atDisplay.atSurface.blit(self.background, self.position)
             self.drawElements()
 
 #
@@ -209,6 +240,15 @@ class label:
             getPosition(self.atDisplay.atSurface, self.surface, self.position)
         )
         self.__needRedraw = False
+    
+    def setPosition(self, x: int, y: int, useFixed=False):
+        self.fixedPosition=useFixed
+        self.position = [x, y]
+        self.__calculatedPosition = (
+            self.position
+            if not self.fixedPosition else 
+            getPosition(self.atDisplay.atSurface, self.surface, self.position)
+        )
     
     def setText(self, string: str):
         self.string = string
@@ -295,6 +335,58 @@ class graph:
                 self.__barSurfaces,
                 (0, 0)
             )
+            self.atDisplay.atSurface.blit(
+                self.surface,
+                (
+                    self.position 
+                    if not self.fixedPosition else 
+                    getPosition(self.atDisplay.atSurface, self.surface, self.position)
+                )
+            )
+
+class loadbar:
+    def __init__(self, atDisplay: display):
+
+        # define the sizes and the display
+        self.atDisplay = atDisplay
+        self.surface = None
+
+        # => size & background
+        self.size = [10, 10]
+        self.backgroundColor = [0, 0, 0]
+        self.barColor = [0, 255, 0]
+
+        self.visible = True
+
+        # => position!
+        self.position = [0, 0]
+        self.fixedPosition = False
+
+        # define the value & it's max value!
+        self.value = 0
+        self.maxValue = 10
+    
+    def updateBar(self):
+        self.surface = pygame.Surface(self.size, pygame.SRCALPHA)
+        self.surface.fill(self.backgroundColor)
+
+        xDivisions = self.size[0] / self.maxValue
+        totalWidth    = math.floor(xDivisions * self.value)
+        totalWidth    = self.size[0] if totalWidth >= self.size[0] else totalWidth
+
+        self.surface.fill(
+            self.barColor,
+            pygame.Rect(
+                (0, 0),
+                (totalWidth, self.size[1])
+            )
+        )
+
+    def tick(self, events):
+        self.updateBar()
+
+    def draw(self):
+        if self.visible:
             self.atDisplay.atSurface.blit(
                 self.surface,
                 (
