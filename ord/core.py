@@ -9,7 +9,7 @@ class window:
         self.surface    = None
         self.title      = 'Overlord Project'
         self.icon       = None
-        self.size       = [850, 600]
+        self.size       = [900, 650]
     
     def generateIcon(self):
         """generateWindow: generate the window icon."""
@@ -25,7 +25,7 @@ class window:
 
     def initWindow(self) -> bool:
         """initWindow: initializes the window with all the loaded settings."""
-        self.surface    = invokeSafe(pygame.display.set_mode, self.size)
+        self.surface    = pygame.display.set_mode(self.size)
         cliAssertion(self.surface != None, "display failed to init: " + pygame.get_error())
         pygame.display.set_caption(self.title)
         # NOTE: case there is no icon, generate one.
