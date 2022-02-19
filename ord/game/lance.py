@@ -109,10 +109,14 @@ class interpreter_err(Exception):
         self.message = message
         super().__init__(self.message)
 
-ERR_INVALID_TYPE = 1
+# Enumerate some possible errors.
+ERR_INVALID_TYPE        = 1
 ERR_UNKNOWN_INSTRUCTION = 2
-ERR_INVALID_LABEL = 3
-ERR_INVALID_SYSCALL = 4
+ERR_INVALID_LABEL       = 3
+ERR_INVALID_SYSCALL     = 4
+
+# NOTE: begin the program settings!
+RETN_NO_STACK_ERROR = False
 
 class interpreter:
     def __init__(self, code):
@@ -129,19 +133,15 @@ class interpreter:
         # define the code
         self.code = code
 
-        # error controller.
-        self.status = 0
-        self.error_str = None
-        self.error_code = 0
+        # program error
+        self.status         = 0
+        self.error_str      = None
+        self.error_code     = 0
 
         # pc: localizes where the code is on the label.
         self.pc = 0
-        self.__skip_pc_increment = False
-        
-        # sp: localizes where the label is on the binary.
-        # NOTE: we don't use this on the interpreter cuz'
-        # we only interpreting data on this version.
         self.sp = 0
+        self.skip_pc = False
     
         # status: store the CMPR flags.
         self.equal_state    = False
@@ -162,48 +162,28 @@ class interpreter:
 
         # if the machine is running.
         self.running = True
+        self.syscalls = []
 
-        # => flat code & prepare to execution <=
+        # => load the main core <=
         self.__prepare()
-
-        # => setup the syscalls <=
         self.__random_generator = random.Random()
-
         self.__setup_syscalls()
-        self.__load_syscalls_utils()
-
-        # => load the opcodes <=
         self.__load_opcodes()
-    
-    def __load_syscalls_utils(self):
-        sysc_table = [
-            "sysc_term_show",
-            "sysc_term_input",
-            "sysc_debug_regs",
-            "sysc_debug_vars",
-            "sysc_random_numbers",
-            "sysc_set_seed"
-        ]
-        # => map all the syscalls <=
-        for index in range(0,len(sysc_table)):
-            self.set_var(sysc_table[index], index)
 
     def __setup_syscalls(self):
-        # setup the syscalls
-        self.syscalls = [
-            # => show input & output <=
-            self.__term_show,
-            self.__term_get,
-
-            # => debugging stuff <=
-            self.__debug_regs,
-            self.__debug_vars,
-
-            # => random numbers <=
-            self.__sysc_random_numbers,
-            self.__sysc_set_seed
+        sysc_table = [
+            ["sysc_term_show",          self.sysc_term_show],
+            ["sysc_term_input",         self.sysc_term_get],
+            ["sysc_debug_regs",         self.sysc_debug_regs],
+            ["sysc_debug_vars",         self.sysc_debug_vars],
+            ["sysc_random_numbers",     self.sysc_random_numbers],
+            ["sysc_set_seed",           self.sysc_set_seed]
         ]
-    
+        for index in range(0, len(sysc_table)):
+            # => set the variable.
+            self.syscalls.append(sysc_table[index][1])
+            self.set_var(sysc_table[index][0], index)
+
     def __load_opcodes(self):
         """load the opcodes!"""
         # setup the opcode table.
@@ -248,23 +228,19 @@ class interpreter:
             'inst': [2, self.perf_inst]
         }
     
-    def __exit_interpreter(self):
-        self.code = self.regs[0]
-        self.running = False
-    
-    def __sysc_set_seed(self, interpreter):
+    def sysc_set_seed(self, interpreter):
         seed = self.regs[0]
         if isinstance(seed, int):
             self.__random_generator(seed)
 
-    def __sysc_random_numbers(self, interpreter):
+    def sysc_random_numbers(self, interpreter):
         min_r   = self.regs[0]
         max_r   = self.regs[1]
         if isinstance(min_r, int) and isinstance(max_r, int):
             num_g = self.__random_generator.randint(min_r, max_r)
             self.regs[2] = num_g
 
-    def __debug_regs(self, interpreter):
+    def sysc_debug_regs(self, interpreter):
         """ print the registers! """
         if self.output:
             self.output.write("lance: [Registers -- r0 => r10]")
@@ -277,7 +253,7 @@ class interpreter:
                 ))
             self.output.write("lance: [end of the registers]")
     
-    def __debug_vars(self, interpreter):
+    def sysc_debug_vars(self, interpreter):
         """ print the vars! """
         if self.output:
             self.output.write("lance: [Vars: There are %d vars]" % len(self.vars.keys()))
@@ -289,12 +265,12 @@ class interpreter:
                 ))
             self.output.write("lance: [end of the vars]")
     
-    def __term_show(self, interpreter):
+    def sysc_term_show(self, interpreter):
         # show something on the screen.
         if self.output:
             self.output.write(str(self.regs[0]) if self.regs[0] != -10 else '\n')
     
-    def __term_get(self, interpreter):
+    def sysc_term_get(self, interpreter):
         self.regs[0] = input()
 
     def __prepare(self):
@@ -366,15 +342,15 @@ class interpreter:
     
     def error(self, err, code):
         # halt the machine here.
-        self.error_str = err
+        self.error_str  = err
         self.error_code = code
-        self.running = False
+        self.running    = False
+        raise interpreter_err("%s" % err)
     
     def __make_sure(self, eval, err, code):
         """ just a simple assert function actually... """
         if not eval:
             self.error(err, code)
-            raise interpreter_err("%s" % err)
 
     def perf_sysc(self, args):
         invoke = args[0]
@@ -496,7 +472,7 @@ class interpreter:
                 self.call_stack.append([self.at_label, self.pc + 2])
             self.at_label = label
             self.pc = 0
-            self.__skip_pc_increment=True
+            self.skip_pc=True
         else:
             # TODO: do nothing.
             pass
@@ -523,10 +499,14 @@ class interpreter:
     def perf_retn(self, args):
         # FIXME: when multiple returns are called, the stack can be empty
         # anc crash the whole program execution.
-        lastc = self.call_stack.pop()
-        self.at_label   = lastc[0]
-        self.pc         = lastc[1]
-        self.__skip_pc_increment=True
+        if len(self.call_stack) <= 0:
+            if RETN_NO_STACK_ERROR:
+                self.crash("return has reached max bottom!")
+        else:
+            lastc = self.call_stack.pop()
+            self.at_label   = lastc[0]
+            self.pc         = lastc[1]
+            self.skip_pc=True
 
     def perf_inc(self, args):
         inc_what = args[0]
@@ -577,8 +557,8 @@ class interpreter:
             if callable(invoke):
                 invoke(args)
             # NOTE: case the opcode has request to skip the PC incrementation phase.
-            if self.__skip_pc_increment:    self.__skip_pc_increment = False
-            else:                           self.pc += (1 + index_o[0])
+            if self.skip_pc: self.skip_pc = False
+            else: self.pc += (1 + index_o[0])
         else:
             return self.error("invalid opcode %s." % opcode, ERR_UNKNOWN_INSTRUCTION)
         return True
@@ -596,26 +576,19 @@ class interpreter:
 def load_file(fname: str) -> interpreter:
     """load a file and return in the interpreter."""
     # load the file and remove the un-needed '\n' etc.
-    f = open(fname, 'r')
-    lines = [ line.replace('\t',' ').replace('\n','') for line in f ]
+    f       = open(fname, 'r')
+    lines   = [ line.replace('\t',' ').replace('\n','') for line in f ]
     f.close()
-
-    # 1° begin to load the files by tokenizing them.
+    # => init the tokenized buffer <=
     tokenized_buffer = tokenize(lines)
-    
-    # 2° organize the code in sections.
     organized_code = organize_code(tokenized_buffer)
-    
-    # 3° init the interpreter
-    interpreter_instance=interpreter(organized_code)
-
-    # return the instance to execute.
+    interpreter_instance = interpreter(organized_code)
     return interpreter_instance
 
 def __act_as_app():
     # import the libraries.
-    import sys              # => for sys.argv
-    import os               # => for filesystem stuff.
+    import sys              
+    import os               
     assert len(sys.argv) >= 2, "nothing to do."
     assert os.path.isfile(sys.argv[1]), "invalid file."
 
