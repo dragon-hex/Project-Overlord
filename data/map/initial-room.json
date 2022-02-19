@@ -4,14 +4,8 @@
     },
 
     "scripts": [
-        {
-            "name":             "Block",
-            "target":           "hello"
-        },
-        {
-            "name":             "another-script",
-            "target":           "another-script"
-        }
+        {"name": "hello-world.script", "target": "hello-world"},
+        {"name": "killer.script", "target": "killer-script"}
     ],
 
     "player": {
