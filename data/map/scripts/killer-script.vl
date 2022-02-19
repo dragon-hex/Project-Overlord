@@ -1,0 +1,20 @@
+data:
+    data    msg, ""
+die:
+    ; perform illegal instruction to finish the game.
+    move    ii, 0
+    retn
+remove_player_health:
+    sysc    sysc_get_health
+    dec     r0
+    cmpr    r0, 0
+    ce      die
+    sysc    sysc_set_health
+    retn
+main:
+    sysc    sysc_get_position
+    cmpr    r0, 0
+    ce      remove_player_health
+    cmpr    r1, 0 
+    ce      remove_player_health
+    jump    main
