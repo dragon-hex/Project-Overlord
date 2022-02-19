@@ -1,0 +1,3 @@
+main:
+    move    "Hello World!", r0
+    sysc    sysc_term_show
