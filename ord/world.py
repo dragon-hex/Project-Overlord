@@ -521,15 +521,22 @@ class world:
     def tickScripts(self):
         # 1° run the script
         SCRIPT_STEP_PER_TICK = 10
+        HOLD_SCRIPT_EXCEPTIONS = True
 
         timeTaken = 0
         for script in self.scriptPool:
             beginTime = time.time()
-            for tick_counter in range(0, SCRIPT_STEP_PER_TICK):
-                try:
+            if HOLD_SCRIPT_EXCEPTIONS:
+                for tick_counter in range(0, SCRIPT_STEP_PER_TICK):
+                    try:
+                        result = script.step()
+                        if not result: break
+                    except Exception as E:
+                        self.crash("[%d] script %s, error: %s" % (tick_counter, script.name, str(E)))
+            else:
+                for tick_counter in range(0, SCRIPT_STEP_PER_TICK):
                     result = script.step()
-                except Exception as E:
-                    self.crash("[%d] script %s, error: %s" % (tick_counter, script.name, str(E)))
+                    if not result: break
             timeTaken += ( (time.time() - beginTime) * 1000)
         
         # NOTE: record the time taken by the scripts.
