@@ -5,7 +5,8 @@
 
     "scripts": [
         {"name": "hello-world.script", "target": "hello-world"},
-        {"name": "killer.script", "target": "killer-script"}
+        {"name": "killer.script", "target": "killer-script"},
+        {"name": "testing-area", "target": "testing"}
     ],
 
     "player": {
