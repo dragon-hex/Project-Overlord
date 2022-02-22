@@ -114,17 +114,15 @@ ERR_INVALID_TYPE        = 1
 ERR_UNKNOWN_INSTRUCTION = 2
 ERR_INVALID_LABEL       = 3
 ERR_INVALID_SYSCALL     = 4
+ERR_INVALID_POP         = 5
+ERR_INVALID_LIST_INDEX  = 6
 
 # NOTE: begin the program settings!
 RETN_NO_STACK_ERROR = False
 
 class interpreter:
     def __init__(self, code):
-        """
-        Main vela interpreter.
-        ----------------------
-        On here, you should put your organized code.
-        """
+        """main code runner!""" 
 
         # some core setttings
         self.output = None
@@ -186,9 +184,7 @@ class interpreter:
 
     def __load_opcodes(self):
         """load the opcodes!"""
-        # setup the opcode table.
         self.op_dict = {
-
             # data initializers.
             'data': [2, self.perf_data],
 
@@ -203,6 +199,7 @@ class interpreter:
 
             # system interaction.
             'sysc': [1, self.perf_sysc],
+            'die':  [2, self.perf_die],
 
             # code direction selector.
             'jump': [1, self.perf_jump],
@@ -217,8 +214,20 @@ class interpreter:
             'cmpr': [2, self.perf_cmpr],
             'je':   [1, self.perf_je],
             'jne':  [1, self.perf_jne],
+            'jg':   [1, self.perf_jg],
+            'jl':   [1, self.perf_jl],
             'ce':   [1, self.perf_ce],
             'cne':  [1, self.perf_cne],
+            'cg':   [1, self.perf_cg],
+            'cl':   [1, self.perf_cl],
+
+            # define list & list operations
+            'list': [1, self.perf_list],
+            'lpsh': [2, self.perf_lpsh],
+            'lpop': [2, self.perf_lpop],
+            'lset': [2, self.perf_lset],
+            'llen': [2, self.perf_llen],
+            'lget': [2, self.perf_lget],
 
             # string operations.
             'smgr': [2, self.perf_smgr],
@@ -317,7 +326,7 @@ class interpreter:
         elif token[0] in ("'",'"'):
             return token[1:len(token)-1]
         else:
-            raise interpreter_err("invalid %s data" % token)
+            return self.error("unknown data %s?" % token, ERR_INVALID_TYPE)
         
     def __set_value_quick(self, target: str, value):
         # => set the value to a target.
@@ -352,6 +361,64 @@ class interpreter:
         if not eval:
             self.error(err, code)
 
+    def perf_die(self, args):
+        reason = self.__get_value_quick(args[0])
+        code   = self.__get_value_quick(args[1])
+        self.error(reason, code)
+
+    def perf_list(self, args):
+        # NOTE: list always set the new list at the
+        # variables, never at registers or etc.
+        name = args[0]
+        self.vars[name]=[]
+
+    def perf_llen(self, args):
+        # length of the value.
+        self.__set_value_quick(args[1], len(self.__get_value_quick(args[0])) - 1)
+
+    def perf_lget(self, args):
+        source = self.__get_value_quick(args[0])
+        indexing = self.regs[0]
+        # case you indexed wrong?
+        if indexing >= len(source) or indexing < 0:
+            self.error("invalid indexing: %d for array %s" % (indexing, args[0]), ERR_INVALID_LIST_INDEX)
+        self.__set_value_quick(args[1], source[indexing])
+
+    def perf_lpsh(self, args):
+        # set the source
+        source = self.__get_value_quick(args[0])
+
+        # TODO: make a method that envolves less access!
+        # load the array and modify it's content
+        target_list = self.__get_value_quick(args[1])
+        target_list.append(source)
+        self.__set_value_quick(args[1], target_list)
+
+    def perf_lpop(self, args):
+        # y = x.pop()
+        source_list = self.__get_value_quick(args[0])
+        if len(source_list) <= 0:
+            if RETN_NO_STACK_ERROR:
+                self.error("invalid pop at empty list: %s" % args[0], ERR_INVALID_POP)
+        target = source_list.pop()
+
+        # set the list here
+        self.__set_value_quick(args[0], source_list)
+        self.__set_value_quick(args[1], target)
+
+    def perf_lset(self, args):
+        # y[r0] = x
+        target_list = self.__get_value_quick(args[1])
+        source      = self.__get_value_quick(args[0])
+        indexing    = self.regs[0]
+
+        # case you indexed wrong?
+        if indexing >= len(target_list) or indexing < 0:
+            self.error("invalid indexing: %d for array %s" % (indexing, args[1]), ERR_INVALID_LIST_INDEX)
+
+        target_list[indexing] = source
+        self.__set_value_quick(args[1], target_list)
+
     def perf_sysc(self, args):
         invoke = args[0]
         invoke = self.__get_value_quick(invoke)
@@ -373,7 +440,7 @@ class interpreter:
         self.__set_value_quick(source, source_v[0:len(source_v)-1])
 
     def perf_sadd(self, args):
-        # => add a string...
+        # TODO: finish this opcode.
         pass
     
     def perf_inst(self, args):
@@ -483,11 +550,23 @@ class interpreter:
     def perf_je(self, args):
         self.__perform_conditional_jump(self.equal_state, args[0])
 
+    def perf_jg(self, args):
+        self.__perform_conditional_jump(self.greater_state, args[0])
+    
+    def perf_jl(self, args):
+        self.__perform_conditional_jump(not self.greater_state, args[0])
+
     def perf_cne(self, args):
         self.__perform_conditional_jump(not self.equal_state, args[0], save_call=True)
 
     def perf_ce(self, args):
         self.__perform_conditional_jump(self.equal_state, args[0], save_call=True)
+
+    def perf_cg(self, args):
+        self.__perform_conditional_jump(self.greater_state, args[0], save_call=True)
+    
+    def perf_cl(self, args):
+        self.__perform_conditional_jump(not self.greater_state, args[0], save_call=True)
     
     def perf_call(self, args):
         self.__perform_conditional_jump(True, args[0], save_call=True)
@@ -580,9 +659,9 @@ def load_file(fname: str) -> interpreter:
     lines   = [ line.replace('\t',' ').replace('\n','') for line in f ]
     f.close()
     # => init the tokenized buffer <=
-    tokenized_buffer = tokenize(lines)
-    organized_code = organize_code(tokenized_buffer)
-    interpreter_instance = interpreter(organized_code)
+    tokenized_buffer        = tokenize(lines)
+    organized_code          = organize_code(tokenized_buffer)
+    interpreter_instance    = interpreter(organized_code)
     return interpreter_instance
 
 def __act_as_app():
