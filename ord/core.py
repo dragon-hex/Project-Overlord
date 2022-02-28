@@ -25,13 +25,22 @@ class window:
 
     def initWindow(self) -> bool:
         """initWindow: initializes the window with all the loaded settings."""
-        self.surface    = pygame.display.set_mode(self.size)
+        self.surface    = pygame.display.set_mode(self.size, pygame.RESIZABLE)
         cliAssertion(self.surface != None, "display failed to init: " + pygame.get_error())
         pygame.display.set_caption(self.title)
         # NOTE: case there is no icon, generate one.
         if not self.icon:
             self.generateIcon()
         self.applyIcon()
+    
+    def setMode(self, width: int, height: int) -> None:
+        """setMode: change the window mode."""
+        # BUG: the display doesn't change the size even after function called.
+        self.surface = pygame.display.set_mode((width, height), pygame.RESIZABLE)
+        while (width != self.surface.get_width()) or (height != self.surface.get_height()):
+            print("Setting the value...")
+            self.surface = pygame.display.set_mode((width, height), pygame.RESIZABLE)
+        print(self.surface)
 
     def destroyWindow(self):
         """destroyWindow: close the window."""
