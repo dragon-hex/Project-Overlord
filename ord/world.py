@@ -3,7 +3,7 @@ import pygame
 
 from .core import core
 from .utils import *
-from .game import *
+from .modules import *
 from .gui import *
 
 import random
@@ -24,21 +24,17 @@ ELEMENT_TEX_IMAGE   = 0
 ELEMENT_TEX_SPRITE  = 1
 
 class wElement:
-
-    # names and etc
+    # naming and it generic name.
     name = None
     genericName = None
 
+    # sizes and rects.
     size = None
-
-    # collision boxes and draw positions
     drawRect = None
     collisionRect = None
     position = None
 
-    # NOTE: textureData is used for re-spawn the element texture
-    # because when the world is changed, the texture is unloaded
-    # from the memory.
+    # texture storage & information
     textureData = None
     texture = None
     textureType = None
@@ -46,8 +42,15 @@ class wElement:
     textureTiming = 0
     textureUpdateTime = 0
 
-    # other properties.
+    # misc. properties.
     collide = None
+
+#
+# wEntity: stores the world entity.
+#
+
+class wEntity(wElement):
+    pass
 
 #
 # wStore: world storage.
@@ -57,11 +60,12 @@ class wStore:
     def __init__(self):
         """wStore: store the current world or room.""" 
         self.backgroundData = None
-        self.playerData = None
         self.elementData = None
-        self.infoData = None
+        self.playerData = None
         self.skyboxData = None
         self.scriptData = None
+        self.infoData = None
+        self.poolData = None
 
         # => background <=
         self.background = None
@@ -98,17 +102,20 @@ class world:
         self.world = None
         self.scriptPool = []
 
-        # NOTE: the skybox properties.
+        # define the skybox.
         self.skyBox = skyBox(self.viewport)
 
-        # Some debug functions!
+        # debug functions!
         self.hideWorld = False
         self.hidePlayer = False
-        self.debugHitboxes = True
+        self.debugHitboxes = False
 
-        # events!
+        # shared events.
         self.crash = None
         self.makeSure = None
+        
+        # => terminal instance
+        self.scriptOutput = None
 
     #
     # init functions
@@ -170,6 +177,28 @@ class world:
     def __sysc_get_health(self, instance: interpreter):
         instance.regs[0] = self.player.health
 
+    def __sysc_spawn_element(self, instance: interpreter):
+        self.debug.write("thread %s is spawning element..." % instance.name)
+        targetInPool = instance.regs[0]
+        self.debug.write("element: %s" % targetInPool)
+        targetInPool = self.world.poolData.get(targetInPool)
+        # case the element wasn't found.
+        if targetInPool == None:
+            instance.regs[0] = 0
+            return
+        # set the data.
+        posx = instance.regs[1]
+        if posx == 'keep-pos':
+            # NOTE: keep position doesn't change anything.
+            pass
+        else:
+            posy = instance.regs[2]
+            element = targetInPool.get("data")
+            element['position'][0] = posx
+            element['position'][1] = posy
+        self.newElement(self.world, targetInPool.get("data"))
+        
+
     def injectCoreFunctions(self, instance: interpreter):
         self.debug.write("injecting the core functions on thread: %s" % instance.name)
 
@@ -183,7 +212,8 @@ class world:
             ["sysc_show_hello",     self.__sysc_show_hello],
             ["sysc_get_position",   self.__sysc_get_position],
             ["sysc_set_health",     self.__sysc_set_health],
-            ["sysc_get_health",     self.__sysc_get_health]
+            ["sysc_get_health",     self.__sysc_get_health],
+            ["sysc_spawn_element",  self.__sysc_spawn_element]
         ]
         for tableIndex in range(0, len(table)):
             instance.syscalls.append(table[tableIndex][1])
@@ -197,20 +227,17 @@ class world:
         extractTarget = self.core.baseDir + "map" + os.sep + "scripts/" + script + ".vl"
         self.debug.write("loading script: %s" % extractTarget)
         if os.path.isfile(extractTarget):
-
             # => begin to load the script <=
-            protoScriptDebug = debugReporter(self.debug.enabled)
-            protoScriptDebug.location = "script: %s" % name
             protoScript = load_file(extractTarget)
 
             # => inject some stuff inside the intepreter <=
-            protoScript.output = protoScriptDebug
+            protoScript.output = self.scriptOutput
             protoScript.name = name
 
             # => print function <=
             self.injectCoreFunctions(protoScript)
             self.debug.write("finished loading script %s!" % name)
-
+            
             return protoScript
         else:
             self.crash("script '%s' file not found: '%s'" % (name, extractTarget))
@@ -237,13 +264,15 @@ class world:
         protoWorld.skyboxData       = data.get("skybox")
         protoWorld.infoData         = data.get("info")
         protoWorld.scriptData       = data.get("scripts")
+        protoWorld.poolData         = data.get("pool")
 
-        self.makeSure(protoWorld.backgroundData != None,    "background not defined.")
-        self.makeSure(protoWorld.elementData != None,       "element not defined.")
-        self.makeSure(protoWorld.playerData != None,        "player not defined.")
-        self.makeSure(protoWorld.skyboxData != None,        "skybox not defined.")
-        self.makeSure(protoWorld.infoData != None,          "info not defined.")
-        self.makeSure(protoWorld.scriptData != None,        "script not defined.")
+        self.makeSure(protoWorld.backgroundData != None,    "Background not defined.")
+        self.makeSure(protoWorld.elementData != None,       "Element not defined.")
+        self.makeSure(protoWorld.playerData != None,        "Player not defined.")
+        self.makeSure(protoWorld.skyboxData != None,        "Skybox not defined.")
+        self.makeSure(protoWorld.infoData != None,          "Info not defined.")
+        self.makeSure(protoWorld.scriptData != None,        "Script not defined.")
+        self.makeSure(protoWorld.poolData != None,          "Pool not defined.")
 
         protoWorld.name = protoWorld.infoData.get("name")
         self.makeSure(protoWorld.name != None, "World has no name set up!")
@@ -362,14 +391,17 @@ class world:
 
     def getInWorldPosition(self):
         # return the player relative to world position.
-        playerX = 0 + self.world.cameraRect.x
-        playerX = abs(playerX - self.player.rect.x)
-        
-        playerY = 0 + self.world.cameraRect.y
-        playerY = abs(playerY - self.player.rect.y)
+        if self.world:
+            playerX = 0 + self.world.cameraRect.x
+            playerX = abs(playerX - self.player.rect.x)
+            
+            playerY = 0 + self.world.cameraRect.y
+            playerY = abs(playerY - self.player.rect.y)
 
-        # => return the x and y.
-        return (playerX, playerY)
+            # => return the x and y.
+            return (playerX, playerY)
+        else:
+            return (0, 0)
 
     #
     # tick functions
@@ -401,9 +433,19 @@ class world:
         protoElement.size               = elementSize
 
         # => load the collision rectangle <=
-        # NOTE: this can be described inside the rectangle itself.
-        xDrawPosition = tileSize[0] * elementPos[0]
-        yDrawPosition = tileSize[1] * elementPos[1]
+        if not self.world:
+            # NOTE: there is no need to calculate the world offset when
+            # the world isn't loaded yet.
+            xDrawPosition = (tileSize[0] * elementPos[0])
+            yDrawPosition = (tileSize[1] * elementPos[1])
+        else:
+            # determine how much the world has moved since the beginning
+            # and apply this change to the element, setting it to it's 
+            # point!
+            moveQuantityX = 0 + world.cameraRect.x
+            moveQuantityY = 0 + world.cameraRect.y
+            xDrawPosition = moveQuantityX + (tileSize[0] * elementPos[0])
+            yDrawPosition = moveQuantityY + (tileSize[1] * elementPos[1])
 
         collisionData = element.get("collision")
         protoElement.collide = collisionData.get("enabled") or False
@@ -572,6 +614,23 @@ class world:
                     self.debugHitboxes = not self.debugHitboxes
                 if event.key == pygame.K_F6:
                     self.skyBox.enabled = not self.skyBox.enabled
+                if event.key == pygame.K_p:
+                    self.newElement(self.world, {
+                        "name":                 "table_left",
+                        "generic":              "table00left00",
+                        "position":             [2, 0],
+                        "size":                 [128, 128],
+                        "collision": {
+                            "enabled":          True,
+                            "use":              "modified",
+                            "xSize":            78,
+                            "ySize":            128,
+                            "xPos":             50,
+                            "yPos":             0
+                        },
+                        "textureUpdateTime":    0.3,
+                        "texture":              {"type":"sprite","name":"r_table","only":["table00"]}
+                    })
                     
         # NOTE: the clouds are processed before everything 
         # since they only appear on the background.
