@@ -1,21 +1,7 @@
-data:
-    list    my_data                         ; initialize list "my_data"
-    lpsh    "Hello, ", my_data              ; push element "Hello, "
-    lpsh    "World!", my_data               ; push element "World!"
-    data    my_data_length, 0               ; store the size
-    llen    my_data, my_data_length         ; get the size of the list
-show_content_loop: 
-    inc     r0                              ; increment on the loop
-    move    r0, r1                          ; move temp. r0 to r1
-    lget    my_data, r0                     ; get from list, r0
-    call    print                           ; call print
-    move    r1, r0                          ; move back r0 from r1
-    cmpr    r0, my_data_length              ; compare if the size is eq?
-    jne     show_content_loop               ; case not, keep in the loop
-    retn                                    ; return to the main exec.
-show_content:
-    move    -1, r0                          ; set the indexer to 0
-    call    show_content_loop               ; call the content loop!
-    retn                                    ; return to the main function
 main:
-    call    show_content                    ; call the content show function!
+    move        "floating_eye", r0
+    move        "keep-pos", r1
+    jump        core
+core:
+    sysc        sysc_spawn_element
+    jump        core
