@@ -14,7 +14,7 @@ class debugReporter:
         if self.enabled:
             for output in self.outputs:
                 try:    output.write(("[%s] debug: " % self.location) + string + "\n")
-                except: 
+                except Exception as E: 
                     # NOTE: this will break the debug.
                     self.outputs.remove(output)
                     return
