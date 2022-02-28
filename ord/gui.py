@@ -29,7 +29,7 @@ def getPosition(baseSurface, targetSurface, position):
     return [math.floor(xPos), math.floor(yPos)]
 
 #
-# __basicContainer()
+# __basicContainer: basic functions for display & frame.
 #
 
 class __basicContainer:
@@ -86,7 +86,7 @@ class __basicContainer:
                     self.__handleExceptionAtDraw(E)
 
 #
-# cursor class
+# cursor: use the cursor to point at something!
 #
 
 CURSOR_DEFAULT = 0
@@ -129,7 +129,7 @@ class cursor:
         self.rect.y += self.offsetInY
 
 #
-# display class
+# display: stores the display?
 #
 
 class display(__basicContainer):
@@ -143,6 +143,16 @@ class display(__basicContainer):
         self.atSurface = atSurface
         self.cursor = cursor()
     
+    def adjustCursor(self, neww: int, newh: int):
+        # try to find the position of the viewport
+        # in the new resized window.
+        possibleNewX = neww // 2 - (self.atSurface.get_width() // 2)
+        possibleNewY = newh // 2 - (self.atSurface.get_height() // 2)
+        self.cursor.offsetInX = 0 - possibleNewX
+        self.cursor.offsetInY = 0 - possibleNewY
+
+        # adjust the position of the elements and their offsets.
+    
     def tick(self, events):
         """tick: tick the main display."""
         # NOTE: process the video resize!
@@ -150,9 +160,8 @@ class display(__basicContainer):
 
         for event in events:
             if event.type == pygame.VIDEORESIZE:
-                self.cursor.offsetInX = self.atSurface.get_width()  - event.w
-                self.cursor.offsetInY = self.atSurface.get_height() - event.h
-                print(self.cursor.offsetInX, self.cursor.offsetInY)
+                if event.w >= self.atSurface.get_width() or event.h >= self.atSurface.get_height():
+                    self.adjustCursor(event.w, event.h)
 
         self.tickElements(events)
     
@@ -177,7 +186,7 @@ class display(__basicContainer):
         self.drawElements()
 
 #
-# frame element
+# frame: store the elements easy!
 #
 
 class frame(__basicContainer):
@@ -213,7 +222,45 @@ class frame(__basicContainer):
             self.drawElements()
 
 #
-# label element
+# button: shows a button!
+#
+
+class button:
+    def __init__(self, atDisplay: display, font, string):
+        """
+        button: shows your typical button.
+        """
+        self.atDisplay = atDisplay
+        self.font = font
+        self.string = string
+        self.size = [50, 10]
+        self.backgroundColor = [0, 0, 0]
+        self.foregroundColor = [255, 255, 255]
+        self.position = [0, 0]
+        self.fixedPosition = False
+        self.rect = pygame.Rect(self.size, self.position)
+        self.surface = pygame.Surface(self.size, pygame.SRCALPHA)
+    
+    def render(self):
+        self.surface = pygame.Surface(self.size, pygame.SRCALPHA)
+        self.surface.fill(self.backgroundColor)
+        renderedText = self.font.render(self.string, True, self.foregroundColor)
+        self.surface.blit(
+            renderedText,
+            (
+                (self.surface.get_width() // 2 - renderedText.get_width() // 2),
+                (self.surface.get_height() // 2 - renderedText.get_height() // 2)
+            )
+        )
+
+    def tick(self, events):
+        pass
+
+    def draw(self):
+        self.atDisplay.atSurface.blit
+
+#
+# label: shows text!
 #
 
 class label:
@@ -267,7 +314,7 @@ class label:
                 )
 
 #
-#
+# graph: shows information but in the vertical!
 #
 class graph:
     def __init__(self, atDisplay: display):
@@ -296,7 +343,7 @@ class graph:
         self.__maxValue = 1
 
         # custom stuff
-        self.foregroundLines = (0xFF,0x00,0xFF)
+        self.foregroundLines = (0xFF, 0x00, 0xFF)
     
     def setValue(self, value):
         """SetValue: set the value here."""
@@ -370,7 +417,7 @@ class loadbar:
         self.surface = pygame.Surface(self.size, pygame.SRCALPHA)
         self.surface.fill(self.backgroundColor)
 
-        xDivisions = self.size[0] / self.maxValue
+        xDivisions    = self.size[0] / self.maxValue
         totalWidth    = math.floor(xDivisions * self.value)
         totalWidth    = self.size[0] if totalWidth >= self.size[0] else totalWidth
 
