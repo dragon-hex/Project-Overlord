@@ -3,9 +3,30 @@
         "name"      : "Initial Room"
     },
 
+    "pool": {
+        "floating_eye": {
+            "type":     "element",
+            "data":     {
+                "name":                 "table_left",
+                "generic":              "table00left00",
+                "position":             [2, 0],
+                "size":                 [128, 128],
+                "collision": {
+                    "enabled":          true,
+                    "use":              "modified",
+                    "xSize":            78,
+                    "ySize":            128,
+                    "xPos":             50,
+                    "yPos":             0
+                },
+                "textureUpdateTime":    0.3,
+                "texture":              {"type":"sprite","name":"r_table","only":["table00"]}
+            }
+        }
+    },
+
     "scripts": [
         {"name": "hello-world.script", "target": "hello-world"},
-        {"name": "killer.script", "target": "killer-script"},
         {"name": "testing-area", "target": "testing"}
     ],
 
