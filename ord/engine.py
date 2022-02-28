@@ -10,7 +10,7 @@ import time
 from .core import core
 from .utils import *
 from .gui import *
-from .game import *
+from .modules import *
 from .world import *
 
 #
@@ -89,17 +89,19 @@ class engine:
                 if event.type == pygame.QUIT:
                     insideCrash = False
                 if event.type == pygame.VIDEORESIZE:
-                    # NOTE: when the game is crashed, there is no reason
-                    # to resize the video.
+                    # TODO: this may crash the machine?
+                    # BUG: this will render garbage on the screen.
                     self.debug.write("video resizing on crash?")
+                    self.core.window.setMode(self.viewport.get_width(), self.viewport.get_height())
             
             # => clean the viewport <=
+            self.core.window.surface.fill((0, 0, 0))
             self.viewport.fill((0, 0, 0))
 
             self.coreDisplay.tick(events)
             self.coreDisplay.draw()
 
-            self.core.window.surface.blit(self.viewport, (0, 0))
+            self.core.window.surface.blit(self.viewport, self.viewportPos)
             pygame.display.flip()
         
         # quit the program due instable envirolment.
@@ -203,6 +205,11 @@ class engine:
         # => non fixed elements, this will change in some parts in debugging!
         self.playerPositionDebugLabel = label(self.coreDisplay, mediumFont, "X: 0, Y: 0")
         self.playerPositionDebugLabel.position = [0, yPos]
+        self.playerPositionDebugLabel.render()
+
+        self.mousePositionDebugLabel = label(self.coreDisplay, mediumFont, "MX: 0, MY: 0")
+        self.mousePositionDebugLabel.render()
+        self.mousePositionDebugLabel.position = [0, self.playerPositionDebugLabel.position[1]+self.mousePositionDebugLabel.surface.get_height()]
     
         # => show the graph and it's value!
         self.tickDebugGraph = graph(self.coreDisplay)
@@ -245,6 +252,8 @@ class engine:
         self.debugFrame.addElement(self.tickDebugGraphValueLabel)
 
         self.debugFrame.addElement(self.playerPositionDebugLabel)
+        self.debugFrame.addElement(self.mousePositionDebugLabel)
+
         self.coreDisplay.addElement(self.debugFrame)
     
     def initDisplayComponents(self):
@@ -272,6 +281,9 @@ class engine:
         self.world.crash = self.crash
         self.world.makeSure = self.makeSure
 
+        # make sure to use the terminal!
+        self.world.scriptOutput = sys.stdout
+
         # => init the world components!
         self.world.init()
     
@@ -292,10 +304,15 @@ class engine:
 
         # => update the position
         self.playerPositionDebugLabel.setText("X: %d, Y: %d" % self.world.getInWorldPosition())
+        self.mousePositionDebugLabel.setText("MX: %d, MY: %d" % (self.coreDisplay.cursor.rect.x, self.coreDisplay.cursor.rect.y))
 
     def atVideoResizeEvent(self, newWidth, newHeight):
         # NOTE: resize the window! but not the game viewport!
-        pass
+        print(newWidth, newHeight)
+        newViewportXpos = newWidth // 2 - (self.viewport.get_width() // 2)
+        newViewportYpos = newHeight // 2 - (self.viewport.get_height() // 2)
+        self.viewportPos = [newViewportXpos, newViewportYpos]
+        self.core.window.setMode(newWidth, newHeight)
 
     def updatePlayerStatusFrame(self):
         self.playerHealthBar.maxValue = self.world.player.maxHealth
@@ -308,7 +325,12 @@ class engine:
                 return
             
             if event.type == pygame.VIDEORESIZE:
-                self.atVideoResizeEvent(event.w, event.h)
+                if event.w >= self.viewport.get_width() or event.h >= self.viewport.get_height():
+                    self.debug.write("resizing [w: %d, h: %d]" % (event.w, event.h))
+                    self.atVideoResizeEvent(event.w, event.h)
+                else:
+                    self.debug.write("ignoring resize as the new size is lower than fixed viewport.")
+                    self.core.window.setMode(self.viewport.get_width(), self.viewport.get_height())
             
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F3:
