@@ -441,6 +441,7 @@ class engine:
                 if event.key == pygame.K_F3:
                     self.debugFrame.visible = not self.debugFrame.visible
                 if event.key == pygame.K_SPACE:
+                    # => case dialog is enabled!
                     if self.inDialog:
                         self.skipDialogLine()
         
@@ -461,11 +462,24 @@ class engine:
     #
 
     def __drawDialog(self):
+        # TODO: fix the strange BUMP in the text when bold text is set.
+        # TODO: implement more ways to see the text, such as italic!
+
+        # set the dialog box.
         dialog      = self.dialogBuffer[self.dialogAtPhrase]
         dialogFrom  = dialog.get("from")
         dialogText  = dialog.get("message")
 
+        # load the effects
+        effects = {} if dialog.get("effects") == None else dialog.get("effects")
+
+        enableShaking = "shake" in effects.keys()
+        shakingLevel  = effects['shake']['level'] if enableShaking else 0
+
+        # => load the font <=
         mediumFont = self.core.storage.getFont("normal", 16)
+
+        # begin indexing the position!
         xIndex = self.dialogCharBeginX
         yIndex = self.dialogCharBeginY
 
@@ -475,12 +489,16 @@ class engine:
             if dialogText[index] == '/':
                 xIndex = self.dialogCharBeginX
                 yIndex += renderedChar.get_height()
+            elif dialogText[index] == '*':
+                mediumFont.set_bold(not mediumFont.get_bold())
+            elif dialogText[index] == '_':
+                mediumFont.set_italic(not mediumFont.get_italic())
             else:
                 self.viewport.blit(
                     renderedChar,
                     (
-                        xIndex,
-                        yIndex
+                        xIndex + (random.randint(-shakingLevel, shakingLevel) if enableShaking else 0),
+                        yIndex + (random.randint(-shakingLevel, shakingLevel) if enableShaking else 0)
                     )
                 )
                 xIndex += renderedChar.get_width()
