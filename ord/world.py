@@ -619,9 +619,10 @@ class world:
                     self.skyBox.enabled = not self.skyBox.enabled
                 if event.key == pygame.K_p:
                     self.makeDialog([
-                        {'from': "Pixel", 'message': "You met a terrible fate, didn't you?"},
-                        {'from': "Mewtwo", 'message': "You peel us!/I know!"},
-                        {'from': "Fam", 'message': "Now we all gonna die!/I always knew it!/Your..."}
+                        {'from': "Pixel",   'message': "You met a *terrible* fate, didn't you?", 'effects':{ 'shake': {'level': 1} } },
+                        {'from': "Mewtwo",  'message': "_You peel us_!/I know!"},
+                        {'from': "Fam",     'message': "Now we all gonna *die*!/I always knew it!/Your..."},
+                        {'from': "Pixel",   'message': "DIE!"}
                     ])
     
     def __keypressCheck(self):
