@@ -95,6 +95,9 @@ class world:
         self.debug.location = "world"
         self.debug.write("Hello! You enabled debug!")
         
+        # is the player blocked of creating actions?
+        self.inputLocked = False
+        
         # viewport and drawing stuff.
         self.viewport = viewport
 
@@ -113,6 +116,7 @@ class world:
         # shared events.
         self.crash = None
         self.makeSure = None
+        self.makeDialog = None
         
         # => terminal instance
         self.scriptOutput = None
@@ -198,7 +202,6 @@ class world:
             element['position'][1] = posy
         self.newElement(self.world, targetInPool.get("data"))
         
-
     def injectCoreFunctions(self, instance: interpreter):
         self.debug.write("injecting the core functions on thread: %s" % instance.name)
 
@@ -590,8 +593,8 @@ class world:
                 self.debug.write("%s has finished task, removing!" % script.name)
                 self.scriptPool.remove(script)
 
-    def tick(self, events):
-        """tick: process all the game events."""
+    def __singleEvents(self, events):
+        """__singleEvents: process the single events.""" 
         for event in events:
             if event.type == pygame.QUIT:
                 self.core.running = False
@@ -615,29 +618,13 @@ class world:
                 if event.key == pygame.K_F6:
                     self.skyBox.enabled = not self.skyBox.enabled
                 if event.key == pygame.K_p:
-                    self.newElement(self.world, {
-                        "name":                 "table_left",
-                        "generic":              "table00left00",
-                        "position":             [2, 0],
-                        "size":                 [128, 128],
-                        "collision": {
-                            "enabled":          True,
-                            "use":              "modified",
-                            "xSize":            78,
-                            "ySize":            128,
-                            "xPos":             50,
-                            "yPos":             0
-                        },
-                        "textureUpdateTime":    0.3,
-                        "texture":              {"type":"sprite","name":"r_table","only":["table00"]}
-                    })
-                    
-        # NOTE: the clouds are processed before everything 
-        # since they only appear on the background.
-        self.skyBox.tick()
-
-        # load the continuous keypresses!
-        # TODO: implement key maps!
+                    self.makeDialog([
+                        {'from': "Pixel", 'message': "You met a terrible fate, didn't you?"},
+                        {'from': "Mewtwo", 'message': "You peel us!/I know!"},
+                        {'from': "Fam", 'message': "Now we all gonna die!/I always knew it!/Your..."}
+                    ])
+    
+    def __keypressCheck(self):
         keyPress = pygame.key.get_pressed()
         if   keyPress[pygame.K_UP] or keyPress[pygame.K_w]:
             self.walk(self.world, 0, self.player.speed)
@@ -647,10 +634,18 @@ class world:
             self.walk(self.world, -self.player.speed,0)
         elif keyPress[pygame.K_LEFT] or keyPress[pygame.K_a]:
             self.walk(self.world, self.player.speed, 0)
-        
-        # NOTE: the scripts should always catch the procesed data.
-        self.tickWorldElements(self.world)
+
+    def tick(self, events):
+        """tick: process all the game events."""
+        # => user input <=
+        if not self.inputLocked:
+            self.__singleEvents(events)
+            self.__keypressCheck()
+
+        # => routines <=
         self.tickScripts()
+        self.skyBox.tick()
+        self.tickWorldElements(self.world)
 
     #
     # draw functions
