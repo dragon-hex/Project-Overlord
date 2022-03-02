@@ -29,6 +29,22 @@ class engine:
         # => init the world
         self.world = world(self.viewport, sharedCore, debug=debug)
 
+        # => dialog system
+        self.dialogBuffer = []
+        self.dialogCharacters = []
+        
+        # the dialog animation!
+        self.dialogAtPhrase = 0
+        self.dialogCharacterIndex = 0
+        self.dialogCharacterSpeed = 0.01
+        self.dialogCharacterTime = 0
+
+        self.dialogCharBeginX = 25
+        self.dialogCharBeginY = 0
+
+        self.inDialog = False
+        self.dialogFrozen = False
+
         # => set the debug.
         self.debug = debugReporter(debug)
         self.debug.location = 'engine'
@@ -256,6 +272,33 @@ class engine:
 
         self.coreDisplay.addElement(self.debugFrame)
     
+    def __initDialogDisplay(self):
+        self.dialogFrame = frame(self.coreDisplay)
+        
+        # NOTE: dialog size and position is /4 of the screen.
+        self.dialogFrame.background = pygame.Surface((
+            self.viewport.get_width(), self.viewport.get_height()//3
+        ), pygame.SRCALPHA)
+
+        self.dialogFrame.background.fill((0, 0, 0))
+        self.dialogFrame.backgroundPosition=[0, (self.viewport.get_height()//3)*2]
+        self.dialogFrame.visible=False
+
+        # load font
+        mediumFont  = self.core.storage.getFont("normal", 24)
+
+        self.dialogFromLabel = label(self.coreDisplay, mediumFont, "...")
+
+        self.dialogFromLabel.position[0] = 25
+        self.dialogFromLabel.position[1] = 25 + self.dialogFrame.backgroundPosition[1]
+
+        self.dialogFrame.addElement(self.dialogFromLabel)
+        self.coreDisplay.addElement(self.dialogFrame)
+
+        # => apply vars
+        self.dialogCharBeginX = 25
+        self.dialogCharBeginY = self.dialogFromLabel.position[1] + 50
+
     def initDisplayComponents(self):
         """initDisplayComponents: init all the display components."""
         # => init the core display <=
@@ -270,16 +313,39 @@ class engine:
         # => init debug display <=
         self.__initDebugDisplay()
 
+        # => init the dialog display <=
+        self.__initDialogDisplay()
+
     def makeSure(self, condition, atError: str):
         """makeSure: automatically crash the program."""
         if not condition:
             self.crash(atError)
+    
+    def makeDialog(self, dialog: list):
+        """makeDialog: lock the world input & make dialog."""
+        # lock player input!
+        self.world.inputLocked = True
+
+        # load the new dialog buffer
+        self.dialogBuffer = dialog
+        
+        # reset the dialog variables.
+        self.dialogCharacterIndex   = -1
+        self.dialogAtPhrase = 0
+
+        # set the frame to be visible
+        # and enable the dialog mode!
+        self.dialogFrame.visible = True
+        self.inDialog = True
 
     def init(self):
         # set the viewport to the display & init the world display.
         self.initDisplayComponents()
+
+        # connect necessary functions world -> engine
         self.world.crash = self.crash
         self.world.makeSure = self.makeSure
+        self.world.makeDialog = self.makeDialog
 
         # make sure to use the terminal!
         self.world.scriptOutput = sys.stdout
@@ -308,15 +374,54 @@ class engine:
 
     def atVideoResizeEvent(self, newWidth, newHeight):
         # NOTE: resize the window! but not the game viewport!
-        print(newWidth, newHeight)
-        newViewportXpos = newWidth // 2 - (self.viewport.get_width() // 2)
-        newViewportYpos = newHeight // 2 - (self.viewport.get_height() // 2)
-        self.viewportPos = [newViewportXpos, newViewportYpos]
+        newViewportXpos     = newWidth // 2 - (self.viewport.get_width() // 2)
+        newViewportYpos     = newHeight // 2 - (self.viewport.get_height() // 2)
+        self.viewportPos    = [newViewportXpos, newViewportYpos]
         self.core.window.setMode(newWidth, newHeight)
 
     def updatePlayerStatusFrame(self):
         self.playerHealthBar.maxValue = self.world.player.maxHealth
         self.playerHealthBar.value = self.world.player.health
+    
+    def __endDialog(self):
+        # => reset the values.
+        self.dialogAtPhrase = 0
+        self.dialogCharacterIndex = 0
+        self.dialogFrozen = False
+
+        # => unlock & disable stuff.
+        self.inDialog = False
+        self.dialogFrame.visible = False
+        self.world.inputLocked = False
+
+    def __tickDialog(self):
+        """__tickDialog: update the dialog!"""
+        messageAt = self.dialogBuffer[self.dialogAtPhrase].get("message")
+        if not self.dialogFrozen:
+            if self.dialogCharacterIndex + 1 > len(messageAt):
+                # froze the dialog, because there are no dialog anymore.
+                self.dialogFrozen = True
+            else:
+                self.dialogCharacterIndex += 1
+        
+        if self.dialogAtPhrase >= len(self.dialogBuffer):
+            self.__endDialog()
+
+    def updateDialog(self, events):
+        if pygame.time.get_ticks() > self.dialogCharacterTime:
+            self.__tickDialog()
+            self.dialogCharacterTime = pygame.time.get_ticks() + (1000 * self.dialogCharacterSpeed)
+    
+    def skipDialogLine(self):
+        self.debug.write("skipping dialog...")
+        if self.dialogAtPhrase + 1 >= len(self.dialogBuffer): 
+            # end the dialog.
+            self.__endDialog()
+        else:
+            # => reset the values and unfreeze the dialog system
+            self.dialogFrozen = False
+            self.dialogCharacterIndex = 0
+            self.dialogAtPhrase += 1
 
     def tick(self, events):
         for event in events:
@@ -335,9 +440,14 @@ class engine:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F3:
                     self.debugFrame.visible = not self.debugFrame.visible
+                if event.key == pygame.K_SPACE:
+                    if self.inDialog:
+                        self.skipDialogLine()
         
         # set the world tick & update the core display.
         self.__tickDebugFrame()
+        if self.inDialog:
+            self.updateDialog(events)
 
         # => update the player stuff
         self.updatePlayerStatusFrame()
@@ -350,6 +460,34 @@ class engine:
     # draw functions
     #
 
+    def __drawDialog(self):
+        dialog      = self.dialogBuffer[self.dialogAtPhrase]
+        dialogFrom  = dialog.get("from")
+        dialogText  = dialog.get("message")
+
+        mediumFont = self.core.storage.getFont("normal", 16)
+        xIndex = self.dialogCharBeginX
+        yIndex = self.dialogCharBeginY
+
+        for index in range(0, self.dialogCharacterIndex):
+            # NOTE: there are a char the indicate a newline, '/' one!
+            renderedChar = mediumFont.render(dialogText[index], True, (255, 255, 255))
+            if dialogText[index] == '/':
+                xIndex = self.dialogCharBeginX
+                yIndex += renderedChar.get_height()
+            else:
+                self.viewport.blit(
+                    renderedChar,
+                    (
+                        xIndex,
+                        yIndex
+                    )
+                )
+                xIndex += renderedChar.get_width()
+
+        # => set the from label!
+        self.dialogFromLabel.setText(dialogFrom)
+
     def draw(self):
         if self.core.running:
             # draw the world
@@ -357,6 +495,10 @@ class engine:
 
             # update the display
             self.coreDisplay.draw()
+        
+            # in dialog?
+            if self.inDialog:
+                self.__drawDialog()
 
             # draw the viewport.
             self.core.window.surface.blit(
