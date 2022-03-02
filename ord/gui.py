@@ -51,6 +51,7 @@ class __basicContainer:
     #
     def __handleExceptionAtTick(self, exception):
         """__handleExceptionAtTick: when a tick error happens."""
+        print("Exception %s" % str(exception))
         if self.onTickError:
             if callable(self.onTickError):
                 invokeSafe(self.onTickError, exception)
@@ -182,8 +183,8 @@ class display(__basicContainer):
 
     def draw(self):
         """draw: draw the display.""" 
-        self.__drawCursor()
         self.drawElements()
+        self.__drawCursor()
 
 #
 # frame: store the elements easy!
@@ -217,7 +218,7 @@ class frame(__basicContainer):
     
     def draw(self):
         if self.visible:
-            if self.background:
+            if self.background and self.position:
                 self.atDisplay.atSurface.blit(self.background, self.position)
             self.drawElements()
 
@@ -238,12 +239,17 @@ class button:
         self.foregroundColor = [255, 255, 255]
         self.position = [0, 0]
         self.fixedPosition = False
+        self.__needRedraw = True
         self.rect = pygame.Rect(self.size, self.position)
         self.surface = pygame.Surface(self.size, pygame.SRCALPHA)
+        self.visible = True
     
     def render(self):
+        # init the surface once again!
         self.surface = pygame.Surface(self.size, pygame.SRCALPHA)
         self.surface.fill(self.backgroundColor)
+
+        # render the text.
         renderedText = self.font.render(self.string, True, self.foregroundColor)
         self.surface.blit(
             renderedText,
@@ -253,11 +259,29 @@ class button:
             )
         )
 
+        # load the calculated position & apply to rect.
+        self.__calculatedPosition = (
+            self.position
+            if not self.fixedPosition else 
+            getPosition(self.atDisplay.atSurface, self.surface, self.position)
+        )
+
+        self.rect = pygame.Rect(self.__calculatedPosition, self.surface.get_size())
+
     def tick(self, events):
-        pass
+        # need redraw?
+        if self.__needRedraw:
+            self.render()
+            self.__needRedraw=False
+        buttonHovered = self.atDisplay.cursor.rect.colliderect(self.rect)
+        if buttonHovered:
+            print("OH!")
 
     def draw(self):
-        self.atDisplay.atSurface.blit
+        if self.visible:
+            if self.surface:
+                self.atDisplay.atSurface.blit(self.surface, self.__calculatedPosition)
+                pygame.draw.rect(self.atDisplay.atSurface, (0, 0, 0), self.rect)
 
 #
 # label: shows text!
