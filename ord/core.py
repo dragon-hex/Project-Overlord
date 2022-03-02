@@ -36,22 +36,21 @@ class window:
     def setMode(self, width: int, height: int) -> None:
         """setMode: change the window mode."""
         # BUG: the display doesn't change the size even after function called.
+        # So, this is a UGLY way to assert the mode was set up!
         self.surface = pygame.display.set_mode((width, height), pygame.RESIZABLE)
         while (width != self.surface.get_width()) or (height != self.surface.get_height()):
-            print("Setting the value...")
             self.surface = pygame.display.set_mode((width, height), pygame.RESIZABLE)
-        print(self.surface)
 
     def destroyWindow(self):
         """destroyWindow: close the window."""
         invokeSafe(pygame.display.quit,None)
 
 # content provider
-CPR_ELEMENT_INDEX = 0
-CPR_ELEMENT_TIMER = 1
-CPR_TYPE_IMAGE  = 'image'
-CPR_TYPE_FONT = 'font'
-CPR_TYPE_SPRITE = 'sprite'
+CPR_ELEMENT_INDEX   = 0
+CPR_ELEMENT_TIMER   = 1
+CPR_TYPE_IMAGE      = 'image'
+CPR_TYPE_FONT       = 'font'
+CPR_TYPE_SPRITE     = 'sprite'
 
 class contentProvider:
     def __init__(self, debug=False):
