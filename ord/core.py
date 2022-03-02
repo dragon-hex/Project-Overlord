@@ -134,24 +134,15 @@ class contentProvider:
         
     def __loadFont(self, name, size):
         target = self.baseDir + "fonts" + os.sep + name + ".dat"
-        self.debug.write("loading font from path: %s" % target)
+        #self.debug.write("loading font from path: %s" % target)
         try:    fontReturned = pygame.font.Font(target, size)
         except: return None
         return fontReturned
     
     def getFont(self, name: str, size: int) -> None | pygame.font.Font:
         """getFont: return the font object to render."""
-        targetKey = "f_" + name + "_" + str(size)
-        cacheReturn = self.getCache(targetKey)
-        if not cacheReturn:
-            fontLoaded = self.__loadFont(name, size)
-            if not fontLoaded:
-                # NOTE: couldn't load the font.
-                return False
-            self.newCache(targetKey, fontLoaded)
-            return fontLoaded
-        else:
-            return cacheReturn[CPR_ELEMENT_INDEX]
+        # NOTE: the font can't be shared, unlike a image.
+        return self.__loadFont(name, size)
         
     def getSprites(self, name: str, ordered=False):
         """getSprites: return the sprites!""" 
