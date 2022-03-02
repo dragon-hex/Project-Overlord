@@ -1,7 +1,3 @@
 main:
-    move        "floating_eye", r0
-    move        "keep-pos", r1
-    jump        core
-core:
-    sysc        sysc_spawn_element
-    jump        core
+    move    "Hello World!", r0
+    call    print
