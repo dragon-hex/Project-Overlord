@@ -1,3 +1,2 @@
 main:
-    move    "Hello World!", r0
-    call    print
+    exit
