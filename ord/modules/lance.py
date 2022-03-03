@@ -1,5 +1,6 @@
 # lance is vela, but interpreted, this will not compile your code.
 import random
+import time
 
 VERSION_STR = "1.0"
 
@@ -108,6 +109,13 @@ class interpreter_err(Exception):
         self.message = message
         super().__init__(self.message)
 
+# Enumerate all the possible status
+STATUS_NOT_INITIALIZED = 0
+STATUS_RUNNING = 1
+STATUS_SLEEPING = 2
+STATUS_FINISHED = 3
+STATUS_DIED = 4
+
 # Enumerate some possible errors.
 ERR_INVALID_TYPE        = 1
 ERR_UNKNOWN_INSTRUCTION = 2
@@ -115,6 +123,7 @@ ERR_INVALID_LABEL       = 3
 ERR_INVALID_SYSCALL     = 4
 ERR_INVALID_POP         = 5
 ERR_INVALID_LIST_INDEX  = 6
+ERR_INVALID_EXEC        = 7
 
 # NOTE: begin the program settings!
 RETN_NO_STACK_ERROR = False
@@ -125,6 +134,10 @@ class interpreter:
         # some core setttings
         self.output = None
         self.name = "lance"
+        self.state = 0
+
+        # => sleeping state
+        self.sleeping_until = 0
 
         # define the code
         self.code = code
@@ -201,6 +214,8 @@ class interpreter:
             # system interaction.
             'sysc': [1, self.perf_sysc],
             'die':  [2, self.perf_die],
+            'exit': [0, self.perf_exit],
+            'wait': [1, self.perf_wait],
 
             # code direction selector.
             'jump': [1, self.perf_jump],
@@ -301,6 +316,9 @@ class interpreter:
         self.regs = [0 for index in range(0, 10+1)]
         self.vars = {}
         self.__setup_progvars()
+        
+        # set the mode to running
+        self.status = STATUS_RUNNING
     
     def __setup_progvars(self):
         """__setup_progvars: setup the necessary vars.""" 
@@ -363,6 +381,16 @@ class interpreter:
         """ just a simple assert function actually... """
         if not eval:
             self.error(err, code)
+
+    def perf_exit(self, args):
+        # It takes no args!
+        self.running = False
+
+    def perf_wait(self, args):
+        # put the machine to sleep for a specific time.
+        source = self.__get_value_quick(args[0])
+        self.status=STATUS_SLEEPING
+        self.sleeping_until=(time.time()*1000)+(1000*source)
 
     def perf_die(self, args):
         reason = self.__get_value_quick(args[0])
@@ -619,7 +647,20 @@ class interpreter:
         Step will run your code until it reaches the end of a label.
         """
         # If there no code to run anymore, set running to false
-        #print(self.vars)
+        if self.status != STATUS_RUNNING:
+            if self.status == STATUS_SLEEPING:
+                # check if the time is already finished case it is, then put the machine to work
+                # again, case not, then just return true.
+                if (time.time()*1000) > self.sleeping_until:
+                    self.status = STATUS_RUNNING
+                else:
+                    # return True, because the machine still operating!
+                    return True
+            
+            # case the other status.
+            if self.status == STATUS_DIED: self.error("execution on dead state.", ERR_INVALID_EXEC)
+            if self.status == STATUS_NOT_INITIALIZED: self.error("execution on not initialized state.", ERR_INVALID_EXEC)
+
         if not self.running:
             return self.running
         
