@@ -1,10 +1,10 @@
 # high priority module!
 import pygame
 
-from .core import core
-from .utils import *
-from .modules import *
-from .gui import *
+from .core      import core
+from .utils     import *
+from .modules   import *
+from .gui       import *
 
 import random
 import time
@@ -565,8 +565,8 @@ class world:
     
     def tickScripts(self):
         # 1° run the script
-        SCRIPT_STEP_PER_TICK = 10
-        HOLD_SCRIPT_EXCEPTIONS = True
+        SCRIPT_STEP_PER_TICK    = 10
+        HOLD_SCRIPT_EXCEPTIONS  = True
 
         timeTaken = 0
         for script in self.scriptPool:
@@ -574,14 +574,23 @@ class world:
             if HOLD_SCRIPT_EXCEPTIONS:
                 for tick_counter in range(0, SCRIPT_STEP_PER_TICK):
                     try:
+                        # set the script to step!
                         result = script.step()
-                        if not result: break
+                        if not result: 
+                            break
+
+                        # NOTE: case the status is sleeping, advance to the next script, this will prevent
+                        # the script from "ghost executing".
+                        if script.status == STATUS_SLEEPING:
+                            break
+
                     except Exception as E:
                         self.crash("[%d] script %s, error: %s" % (tick_counter, script.name, str(E)))
             else:
                 for tick_counter in range(0, SCRIPT_STEP_PER_TICK):
                     result = script.step()
-                    if not result: break
+                    if not result: 
+                        break
             timeTaken += ( (time.time() - beginTime) * 1000)
         
         # NOTE: record the time taken by the scripts.
@@ -617,13 +626,6 @@ class world:
                     self.debugHitboxes = not self.debugHitboxes
                 if event.key == pygame.K_F6:
                     self.skyBox.enabled = not self.skyBox.enabled
-                if event.key == pygame.K_p:
-                    self.makeDialog([
-                        {'from': "Pixel",   'message': "You met a *terrible* fate, didn't you?", 'effects':{ 'shake': {'level': 1} } },
-                        {'from': "Mewtwo",  'message': "_You peel us_!/I know!"},
-                        {'from': "Fam",     'message': "Now we all gonna *die*!/I always knew it!/Your..."},
-                        {'from': "Pixel",   'message': "DIE!"}
-                    ])
     
     def __keypressCheck(self):
         keyPress = pygame.key.get_pressed()
