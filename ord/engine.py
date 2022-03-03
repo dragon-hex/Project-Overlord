@@ -19,6 +19,7 @@ from .world import *
 
 class engine:
     def __init__(self, sharedCore: core, debug=False):
+        """engine: keeps all the gui's and other functions here."""
         # => set the core function.
         self.core = sharedCore
 
@@ -51,6 +52,7 @@ class engine:
         self.debug.write("Debugging the engine!")
 
     def __getRandomMessage(self):
+        """return one random msg!"""
         __messages = [
             "I don't know english!",
             "Oh goodbye, the night and day...",
@@ -87,9 +89,7 @@ class engine:
         return phrase
 
     def crash(self, reason: str):
-        """
-        crash: show the error screen and try to save the game.
-        """
+        """show the error screen exposing the error and try to save the game."""
         
         # => adjust the elements <=
         self.mainError.setText('"%s"' % str(reason))
@@ -124,6 +124,7 @@ class engine:
         exit(-1)
 
     def __initPlayerStatusDisplay(self):
+        """init the elements of the player status frame."""
         # => show the player name & health
         self.playerStatusFrame = frame(self.coreDisplay)
         self.playerStatusFrame.background = pygame.Surface((100, 45), pygame.SRCALPHA)
@@ -147,6 +148,7 @@ class engine:
         self.coreDisplay.addElement(self.playerStatusFrame)
 
     def __initPanicDisplay(self):
+        """init the elements of the panic frame."""
         # => build the panic frame <=
         self.panicFrame = frame(self.coreDisplay)
         self.panicFrame.background = pygame.Surface(self.viewport.get_size())
@@ -192,7 +194,7 @@ class engine:
         self.coreDisplay.addElement(self.panicFrame)
     
     def __initDebugDisplay(self):
-        """initDebugDisplay: all the elements for the debug display."""
+        """init the elements from the debug frame."""
         # => init the core display and load the fonts!
         self.debugFrame = frame(self.coreDisplay)
         self.debugFrame.visible = False
@@ -202,11 +204,11 @@ class engine:
         fixedTexts = [
             "Reaper I, %s" % REAPER_VERSION[0],
             "Python %s, pygame: %s" % (getPythonVersion(), pygame.version.ver),
+            "System: %s" % (getSystem()[1]),
             "Debugging? %s" % str(self.debug.enabled),
             "Screen: W = %d, H = %d [Fixed]" % self.viewport.get_size()
         ]
 
-        tElements   = []
         yPos        = 0
         for text in fixedTexts:
             # init the element.
@@ -273,6 +275,7 @@ class engine:
         self.coreDisplay.addElement(self.debugFrame)
     
     def __initDialogDisplay(self):
+        """setup the dialog frame."""
         self.dialogFrame = frame(self.coreDisplay)
         
         # NOTE: dialog size and position is /4 of the screen.
@@ -300,7 +303,7 @@ class engine:
         self.dialogCharBeginY = self.dialogFromLabel.position[1] + 50
 
     def initDisplayComponents(self):
-        """initDisplayComponents: init all the display components."""
+        """init the core display and all the frames.""" 
         # => init the core display <=
         self.coreDisplay = display(self.viewport)
         
@@ -317,12 +320,12 @@ class engine:
         self.__initDialogDisplay()
 
     def makeSure(self, condition, atError: str):
-        """makeSure: automatically crash the program."""
+        """simple assertion, case false, crash!"""
         if not condition:
             self.crash(atError)
     
     def makeDialog(self, dialog: list):
-        """makeDialog: lock the world input & make dialog."""
+        """lock the world and begin the dialog.""" 
         # lock player input!
         self.world.inputLocked = True
 
@@ -358,6 +361,7 @@ class engine:
     #
 
     def __tickDebugFrame(self):
+        """tick the debug frame."""
         # => update the graph
         self.fpsDebugGraph.setValue(60 - self.core.averageFps)
         self.fpsDebugGraphValueLabel.setText(str(self.core.averageFps))
