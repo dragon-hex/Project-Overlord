@@ -352,7 +352,7 @@ class world:
             matrix = generationInstruction.get("matrix")
             world.background = pygame.Surface(((_W) * _TW, (_H) * _TH))
             
-            for yIndex in range(0, _H + 1):
+            for yIndex in range(0, _H):
                 # NOTE: prevent from errors.
                 # BUG: this is a bug, the generation should index from 0 -> x.
             
@@ -360,7 +360,7 @@ class world:
                     self.debug.write("yLine has finished before expected: %d -> %d" % (yIndex, len(matrix)))
                     break
             
-                for xIndex in range(0, _W + 1):
+                for xIndex in range(0, _W):
                     # NOTE: prevent from errors.
                     if xIndex >= len(matrix[yIndex]):
                         self.debug.write("xLine has finished before expected: %d -> %d" % (xIndex, len(matrix[yIndex])))
