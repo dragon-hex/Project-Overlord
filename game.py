@@ -1,15 +1,22 @@
-import os, sys
-import pygame
-import ord
-import time
+# begin by importing the ven project!
+import ven
 
-# ENUM THE FUNCTIONS
+# import the pygame library.
+import pygame
+
+# import some python important libraries!
+import os, sys, time
+
+#############
+# constants #
+#############
+
 TICK_FUNCTION = 0
 DRAW_FUNCTION = 1
 
 class game:
     def __init__(self):
-        self.ordCore = None
+        self.venCore = None
         self.baseDir = None
         self.enableDebug = False
     
@@ -48,13 +55,12 @@ class game:
             else:
                 self.__fail("invalid argument: " + arg)
             argIndex += 1
-        print(self.baseDir)
     
     def init(self):
         """init: init the engine!"""
         
         self.loadArgs(sys.argv)
-        self.ordCore = ord.core(debug=self.enableDebug)
+        self.venCore = ven.core(debug=self.enableDebug)
 
         # NOTE: case the game dir is not initialized, then use default option.
         if not self.baseDir:
@@ -63,44 +69,44 @@ class game:
         if not os.path.exists(self.baseDir):
             self.__fail("no directory found.")
 
-        self.ordCore.setBaseDir(self.baseDir)
+        self.venCore.setBaseDir(self.baseDir)
         
         # finally init the core.
-        self.ordCore.init()
+        self.venCore.init()
         
         # set the core.
-        self.ordWorld = ord.engine(self.ordCore, debug=self.enableDebug)
-        self.ordWorld.init()
+        self.world = ven.engine(self.venCore, debug=self.enableDebug)
+        self.world.init()
 
-        self.ordCore.modes = [
-            [self.ordWorld.tick, self.ordWorld.draw, "world"]
+        self.venCore.modes = [
+            [self.world.tick, self.world.draw, "world"]
         ]
 
-        self.ordCore.running = True
+        self.venCore.running = True
     
     def loop(self):
         """loop: loop the engine!"""
         clock = pygame.time.Clock()
 
-        while self.ordCore.running:
+        while self.venCore.running:
             # register the mode.
-            onMode = self.ordCore.onMode
+            onMode = self.venCore.onMode
             events = pygame.event.get()
 
             tickBegin = time.time()
-            self.ordCore.modes[onMode][TICK_FUNCTION](events)
-            self.ordCore.timeTakenByTick = (time.time() - tickBegin) * 1000
+            self.venCore.modes[onMode][TICK_FUNCTION](events)
+            self.venCore.timeTakenByTick = (time.time() - tickBegin) * 1000
 
             drawBegin = time.time()
-            self.ordCore.modes[onMode][DRAW_FUNCTION]()
-            self.ordCore.timeTakenByDraw = (time.time() - drawBegin) * 1000
+            self.venCore.modes[onMode][DRAW_FUNCTION]()
+            self.venCore.timeTakenByDraw = (time.time() - drawBegin) * 1000
             
-            self.ordCore.averageFps = clock.get_fps()
+            self.venCore.averageFps = clock.get_fps()
             clock.tick(60)
     
     def quit(self):
         """quit: quit the game."""
-        self.ordCore.quit()
+        self.venCore.quit()
 
 def wrapper():
     gameInstance = game()
