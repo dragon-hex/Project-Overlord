@@ -22,7 +22,24 @@
                 "textureUpdateTime":    0.3,
                 "texture":              {"type":"sprite","name":"r_table","only":["table00"]}
             }
+        },
+
+        "dialog_computer_0": {
+            "type": "dialog",
+            "data": [
+                {"from": "Computer", "message": "There is nothing to see here..."},
+                {"from": null, "message": "Very strange... computers shouldn't speak!"}
+            ]
+        },
+        
+        "dialog_computer_1": {
+            "type": "dialog",
+            "data": [
+                {"from": null, "message": "You need help?"},
+                {"from": null, "message": "..."}
+            ]
         }
+
     },
 
     "scripts": [
@@ -67,9 +84,11 @@
             // element names
             "name":                 "table_left",
             "generic":              "table00left00",
+            
             // element sizes
             "position":             [2, 0],
             "size":                 [128, 128],
+
             // element collision size
             "collision": {
                 "enabled":          true,
@@ -79,9 +98,17 @@
                 "xPos":             50,
                 "yPos":             0
             },
+
             // texture settings
             "textureUpdateTime":    0.3,
-            "texture":              {"type":"sprite","name":"r_table","only":["table00"]}
+            "texture":              {"type":"sprite","name":"r_table","only":["table00"]},
+
+            // action stuff
+            "actions": {
+                "atAction": [
+                    {"cmd":"makeDialog", "args": [{"from": null, "msg": "..."},{"from": null, "msg":"Hello?"}] }
+                ]
+            }
         },
         {
             // element name
